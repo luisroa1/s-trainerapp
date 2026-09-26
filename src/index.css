@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: 'Bricolage Grotesque', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+
+  --color-brand-bg: #101012;
+  --color-card-bg: #1B1B1F;
+  --color-card-secondary: #232328;
+  --color-card-dark: #16161A;
+  --color-brand-border: #2A2A2F;
+  --color-brand-border-light: #3A3A40;
+  
+  --color-brand-text: #F5F4F0;
+  --color-brand-muted: #8E8E94;
+  --color-brand-disabled: #5C5C62;
+  
+  --color-lime: #CFFF5C;
+  --color-steps: #FF6B4A;
+  --color-weight: #5CD6FF;
+  --color-sleep: #B388FF;
+  --color-menstrual: #E8A0C4;
+}
+
+:root {
+  --accent-color: #CFFF5C;
+  --accent-text: #101012;
+}
+
+.font-display {
+  font-family: 'Bricolage Grotesque', sans-serif;
+}
+
+.font-body {
+  font-family: 'Manrope', sans-serif;
+}
+
+/* Custom scrollbar for dark aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #101012;
+}
+::-webkit-scrollbar-thumb {
+  background: #2A2A2F;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3A3A40;
+}

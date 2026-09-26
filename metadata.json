@@ -1,0 +1,8 @@
+{
+  "name": "Remix ROAFIT — Plataforma de Entrenamiento",
+  "description": "Plataforma full-stack de entrenamiento: App móvil del cliente y panel web del entrenador que permita seguimiento en tiempo real y rutinas personalizadas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

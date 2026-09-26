@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Send, Check } from 'lucide-react';
+import { ArrowLeft, Send, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
 
 interface TrainerInviteProps {
   onBack: () => void;
@@ -8,30 +9,102 @@ interface TrainerInviteProps {
 }
 
 export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess }) => {
-  const { programs, addClient, appName } = useApp();
+  const { programs, addClient, appName, supabaseUser } = useApp();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [objective, setObjective] = useState('Pérdida de grasa');
   const [startDate, setStartDate] = useState('2026-10-01');
   const [assignedProgram, setAssignedProgram] = useState(programs[0]?.id || 'prog-1');
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setErrorMessage('Por favor introduce el nombre del cliente.');
+      return;
+    }
+    if (!email.trim()) {
+      setErrorMessage('Por favor introduce el email del cliente.');
+      return;
+    }
 
-    addClient({
-      name: name.trim(),
-      email: email.trim(),
-      objective,
-      status: 'Pendiente',
-      assignedProgramId: assignedProgram
-    });
+    setIsLoading(true);
+    setErrorMessage(null);
 
-    setSent(true);
-    setTimeout(() => {
-      onSuccess();
-    }, 1200);
+    try {
+      // Redirección dinámica hacia la pantalla de activación de la app
+      const appOrigin = window.location.origin || 'https://s-trainerapp.ai.studio';
+      const redirectTo = `${appOrigin}/#activate`;
+
+      // 1. Invocar la Edge Function 'invite-client' en Supabase
+      const { data, error } = await supabase.functions.invoke('invite-client', {
+        body: {
+          name: name.trim(),
+          email: email.trim(),
+          objective,
+          startDate,
+          assignedProgramId: assignedProgram,
+          redirectTo,
+        },
+      });
+
+      // 2. Manejar posibles errores devueltos por la Edge Function
+      if (error) {
+        let displayError = error.message;
+
+        // Extraer cuerpo JSON si la respuesta HTTP devolvió error estructurado (ej. 400 o 403)
+        if ('context' in error && (error as any).context) {
+          try {
+            const body = await (error as any).context.json();
+            if (body?.error) {
+              displayError = body.error;
+            }
+          } catch {
+            // No se pudo parsear el JSON
+          }
+        }
+
+        // Caso especial si la función aún no se ha desplegado en el proyecto
+        if (displayError.includes('Failed to send a request') || displayError.includes('FunctionsFetchError') || displayError.includes('404')) {
+          displayError = `La Edge Function 'invite-client' devolvió un error de conexión (${displayError}). Asegúrate de desplegarla con 'supabase functions deploy invite-client'.`;
+        }
+
+        setErrorMessage(displayError);
+        setIsLoading(false);
+        return;
+      }
+
+      if (data?.error) {
+        setErrorMessage(data.error);
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Éxito: Sincronizar cliente en el estado de la app
+      const returnedClient = data?.client || {
+        name: name.trim(),
+        email: email.trim(),
+        objective,
+        status: 'Pendiente',
+        assignedProgramId: assignedProgram,
+        startDate,
+      };
+
+      addClient(returnedClient);
+      setIsLoading(false);
+      setSent(true);
+
+      setTimeout(() => {
+        onSuccess();
+      }, 1500);
+    } catch (err: any) {
+      console.error('Error al invocar invite-client:', err);
+      setErrorMessage(err.message || 'Error inesperado al conectar con el servidor.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -40,7 +113,7 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
       <div className="flex items-center gap-4 mb-8">
         <button
           onClick={onBack}
-          className="w-10 h-10 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40]"
+          className="w-10 h-10 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40] cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
@@ -61,6 +134,17 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="p-6 rounded-[20px] bg-[#16161A] border border-[#2A2A2F] space-y-4">
+          {/* Error Banner */}
+          {errorMessage && (
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-red-400 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-bold block mb-0.5">No se pudo enviar la invitación</span>
+                <span className="leading-relaxed">{errorMessage}</span>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
               NOMBRE
@@ -70,7 +154,10 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
               required
               placeholder="Nombre y apellidos"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => {
+                setName(e.target.value);
+                if (errorMessage) setErrorMessage(null);
+              }}
               className="w-full px-4 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] placeholder-[#5C5C62] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
             />
           </div>
@@ -80,11 +167,14 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
               EMAIL O TELÉFONO
             </label>
             <input
-              type="text"
+              type="email"
               required
               placeholder="nombre@email.com"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={e => {
+                setEmail(e.target.value);
+                if (errorMessage) setErrorMessage(null);
+              }}
               className="w-full px-4 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] placeholder-[#5C5C62] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
             />
           </div>
@@ -145,17 +235,28 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
             <button
               type="button"
               onClick={onBack}
-              className="px-5 py-2.5 rounded-full text-xs font-semibold text-[#8E8E94] hover:text-[#F5F4F0]"
+              disabled={isLoading}
+              className="px-5 py-2.5 rounded-full text-xs font-semibold text-[#8E8E94] hover:text-[#F5F4F0] cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
+              disabled={isLoading}
               style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-              className="px-7 py-3 rounded-full font-bold text-xs shadow-md flex items-center gap-2 transition-transform active:scale-95"
+              className="px-7 py-3 rounded-full font-bold text-xs shadow-md flex items-center gap-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span>Enviar invitación</span>
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Enviando invitación...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Enviar invitación</span>
+                </>
+              )}
             </button>
           </div>
         </form>

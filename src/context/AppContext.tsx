@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ClientData, Program, NutritionPlan, AccentColor, TrainerProfile } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
 import { INITIAL_CLIENTS, INITIAL_PROGRAMS, INITIAL_NUTRITION_PLAN } from '../data/mockData';
+import { supabase, supabaseDb } from '../lib/supabase';
 
 const INITIAL_TRAINER: TrainerProfile = {
   id: 'trn-1',
@@ -11,6 +13,8 @@ const INITIAL_TRAINER: TrainerProfile = {
   avatarUrl: '',
   couponCode: 'STRAINER20'
 };
+
+export type SupabaseStatus = 'connected' | 'needs_tables' | 'error' | 'connecting';
 
 interface AppContextType {
   appName: string;
@@ -36,6 +40,26 @@ interface AppContextType {
   toggleShoppingItem: (clientId: string, category: string, itemName: string) => void;
   addFoodToLog: (clientId: string, foodName: string, kcal: number, protein?: number) => void;
   resetAllData: () => void;
+  // Supabase Auth & Realtime
+  supabaseUser: User | null;
+  supabaseSession: Session | null;
+  userRole: UserRole | null;
+  authLoading: boolean;
+  supabaseStatus: SupabaseStatus;
+  isRealtimeActive: boolean;
+  lastSyncTime: Date | null;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
+  signUp: (params: { 
+    email: string; 
+    password: string; 
+    role: UserRole; 
+    name?: string; 
+    phone?: string; 
+    avatarUrl?: string;
+  }) => Promise<{ success: boolean; error?: string; message?: string }>;
+  signOut: () => Promise<void>;
+  syncAllToSupabase: () => Promise<{ success: boolean; error?: string }>;
+  refreshFromSupabase: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -76,6 +100,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return (saved as AccentColor) || '#CFFF5C';
   });
 
+  // Supabase State
+  const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
+  const [supabaseSession, setSupabaseSession] = useState<Session | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(() => {
+    return (localStorage.getItem('strainer_user_role') as UserRole) || null;
+  });
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>('connecting');
+  const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
   const setAppName = (name: string) => {
     setAppNameState(name);
     localStorage.setItem('strainer_app_name', name);
@@ -88,6 +123,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updated.initials = partial.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
       }
       localStorage.setItem('strainer_trainer', JSON.stringify(updated));
+      // Asynchronously sync to Supabase
+      supabaseDb.upsertTrainerProfile(updated).catch(() => {});
       return updated;
     });
   };
@@ -96,6 +133,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateClient(clientId, { avatarUrl });
   };
 
+  // Sync to localStorage
   useEffect(() => {
     localStorage.setItem('strainer_app_name', appName);
   }, [appName]);
@@ -119,15 +157,383 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('strainer_accent', accentColor);
     document.documentElement.style.setProperty('--accent-color', accentColor);
-    // If accent is light lime or gold, text is dark #101012; else white
     const darkText = accentColor === '#CFFF5C' || accentColor === '#FFD34D';
     document.documentElement.style.setProperty('--accent-text', darkText ? '#101012' : '#FFFFFF');
   }, [accentColor]);
 
+  // Load and sync from Supabase
+  const refreshFromSupabase = useCallback(async () => {
+    try {
+      const health = await supabaseDb.testConnection();
+      if (!health.connected) {
+        setSupabaseStatus('error');
+        return;
+      }
+      if (!health.hasTables) {
+        setSupabaseStatus('needs_tables');
+        return;
+      }
+
+      setSupabaseStatus('connected');
+
+      // Fetch Clients
+      const clientsRes = await supabaseDb.getClients();
+      if (clientsRes.data && clientsRes.data.length > 0) {
+        setClients(clientsRes.data);
+      } else if (clientsRes.data && clientsRes.data.length === 0) {
+        // Table exists but is empty -> seed initial data
+        await supabaseDb.bulkUpsertClients(clients);
+      }
+
+      // Fetch Programs
+      const programsRes = await supabaseDb.getPrograms();
+      if (programsRes.data && programsRes.data.length > 0) {
+        setPrograms(programsRes.data);
+      } else if (programsRes.data && programsRes.data.length === 0) {
+        await supabaseDb.bulkUpsertPrograms(programs);
+      }
+
+      // Fetch Nutrition
+      const nutritionRes = await supabaseDb.getNutritionPlans();
+      if (nutritionRes.data && Object.keys(nutritionRes.data).length > 0) {
+        setNutritionPlans(nutritionRes.data);
+      }
+
+      // Fetch Trainer Profile
+      const trainerRes = await supabaseDb.getTrainerProfile();
+      if (trainerRes.data) {
+        setTrainer(trainerRes.data);
+      }
+
+      setLastSyncTime(new Date());
+    } catch (e) {
+      console.warn('Error refreshing from Supabase:', e);
+    }
+  }, [clients, programs]);
+
+  // Push all local data to Supabase (manual full sync / seed)
+  const syncAllToSupabase = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const clientsErr = await supabaseDb.bulkUpsertClients(clients);
+      if (clientsErr.error) throw clientsErr.error;
+
+      const programsErr = await supabaseDb.bulkUpsertPrograms(programs);
+      if (programsErr.error) throw programsErr.error;
+
+      for (const [cId, plan] of Object.entries(nutritionPlans)) {
+        await supabaseDb.upsertNutritionPlan(cId, plan);
+      }
+
+      await supabaseDb.upsertTrainerProfile(trainer);
+      setLastSyncTime(new Date());
+      setSupabaseStatus('connected');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al sincronizar con Supabase' };
+    }
+  };
+
+  // Setup Supabase Auth listener & Realtime channels on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    // 1. Get initial session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!isMounted) return;
+      if (session) {
+        setSupabaseSession(session);
+        setSupabaseUser(session.user);
+        const role = (session.user.user_metadata?.role as UserRole) || 'client';
+        setUserRole(role);
+        localStorage.setItem('strainer_user_role', role);
+      }
+      setAuthLoading(false);
+    });
+
+    // 2. Auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setSupabaseSession(session);
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) {
+        const role = (session.user.user_metadata?.role as UserRole) || 'client';
+        setUserRole(role);
+        localStorage.setItem('strainer_user_role', role);
+        
+        // If client logs in, match active client by email if found
+        if (role === 'client' && session.user.email) {
+          const matched = clients.find(c => c.email.toLowerCase() === session.user.email?.toLowerCase());
+          if (matched) {
+            setActiveClientId(matched.id);
+          }
+        }
+      } else {
+        setUserRole(null);
+        localStorage.removeItem('strainer_user_role');
+      }
+      setAuthLoading(false);
+    });
+
+    // 3. Initial health check & data fetch
+    refreshFromSupabase();
+
+    // 4. Setup Realtime Subscription
+    const channel = supabase
+      .channel('strainer-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const updated = payload.new?.data as ClientData;
+          if (updated && updated.id) {
+            setClients(prev => {
+              const idx = prev.findIndex(c => c.id === updated.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = updated;
+                return next;
+              }
+              return [updated, ...prev];
+            });
+            setLastSyncTime(new Date());
+          }
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const updated = payload.new?.data as Program;
+          if (updated && updated.id) {
+            setPrograms(prev => {
+              const idx = prev.findIndex(p => p.id === updated.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = updated;
+                return next;
+              }
+              return [updated, ...prev];
+            });
+            setLastSyncTime(new Date());
+          }
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nutrition_plans' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const client_id = payload.new?.client_id;
+          const plan = payload.new?.data as NutritionPlan;
+          if (client_id && plan) {
+            setNutritionPlans(prev => ({ ...prev, [client_id]: plan }));
+            setLastSyncTime(new Date());
+          }
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsRealtimeActive(true);
+        } else {
+          setIsRealtimeActive(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Auth Operations
+  const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string; role?: UserRole }> => {
+    try {
+      setAuthLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        setAuthLoading(false);
+        return { success: false, error: error.message };
+      }
+
+      const role = (data.user?.user_metadata?.role as UserRole) || 'client';
+      setUserRole(role);
+      localStorage.setItem('strainer_user_role', role);
+
+      // Link trainer or client
+      if (role === 'trainer') {
+        updateTrainer({
+          email: data.user.email,
+          name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || trainer.name
+        });
+      } else {
+        const found = clients.find(c => c.email.toLowerCase() === data.user.email?.toLowerCase());
+        if (found) {
+          setActiveClientId(found.id);
+        }
+      }
+
+      setAuthLoading(false);
+      return { success: true, role };
+    } catch (err: any) {
+      setAuthLoading(false);
+      return { success: false, error: err.message || 'Error al iniciar sesión' };
+    }
+  };
+
+  const signUp = async (params: {
+    email: string;
+    password: string;
+    role: UserRole;
+    name?: string;
+    phone?: string;
+    avatarUrl?: string;
+  }): Promise<{ success: boolean; error?: string; message?: string }> => {
+    try {
+      setAuthLoading(true);
+      const { email, password, role, name, phone, avatarUrl } = params;
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            role,
+            full_name: name || '',
+            phone: phone || '',
+            avatar_url: avatarUrl || '',
+          },
+        },
+      });
+
+      if (error) {
+        setAuthLoading(false);
+        return { success: false, error: error.message };
+      }
+
+      const createdUser = data.user;
+      setUserRole(role);
+      localStorage.setItem('strainer_user_role', role);
+
+      // If registered as trainer, update trainer profile
+      if (role === 'trainer') {
+        const updatedTrainer: TrainerProfile = {
+          ...trainer,
+          name: name || trainer.name,
+          email: email.trim(),
+          avatarUrl: avatarUrl || trainer.avatarUrl,
+        };
+        updateTrainer(updatedTrainer);
+        supabaseDb.upsertTrainerProfile(updatedTrainer).catch(() => {});
+      } else {
+        // Registered as client: create client profile entry
+        const initials = (name || 'NC')
+          .split(' ')
+          .map(w => w[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase();
+
+        const newClient: ClientData = {
+          id: `cli-${Date.now()}`,
+          name: name || 'Nuevo Cliente',
+          initials,
+          email: email.trim(),
+          phone: phone || '',
+          birthDate: '1995-01-01',
+          sex: 'Hombre',
+          height: '175 cm',
+          objective: 'Hipertrofia',
+          status: 'Activo',
+          nextWorkout: 'Hoy · Sesión 1',
+          adherencePercentage: 100,
+          completedWorkoutsCount: 0,
+          totalScheduledWorkoutsCount: 4,
+          currentWeight: 75.0,
+          initialWeight: 75.0,
+          targetWeight: 72.0,
+          weightWeeklyTrend: '→ 0,0 kg / semana',
+          lastCheckIn: 'Hoy',
+          avatarUrl: avatarUrl || '',
+          pathologies: {
+            hasLimitations: false,
+            training: 'Sin limitaciones articulares.',
+            nutrition: 'Sin restricciones.'
+          },
+          menstrualTracking: {
+            enabled: false,
+            sharedWithTrainer: false,
+            day: 0,
+            phase: 'Folicular',
+            advice: ''
+          },
+          metrics: {
+            stepsToday: 3500,
+            stepsGoal: 9000,
+            kcalToday: 1100,
+            kcalGoal: 2200,
+            sleepHours: '7h 30min',
+            sleepQuality: 'Buena',
+            waterLiters: 1.5,
+            waterGoal: 2.5
+          },
+          assignedProgramId: 'prog-1',
+          weeklySchedule: [
+            { day: 'L', status: 'completed' },
+            { day: 'M', status: 'pending' },
+            { day: 'X', status: 'rest' },
+            { day: 'J', status: 'pending' },
+            { day: 'V', status: 'pending' },
+            { day: 'S', status: 'rest' },
+            { day: 'D', status: 'rest' },
+          ],
+          strengthProgression: [],
+          bodyMeasurements: { cintura: 80, cadera: 95, pecho: 98, brazo: 34, lastUpdated: 'Hoy' },
+          impedanceHistory: [{ date: 'HOY', weight: 75.0, fatPercentage: 18.0, muscleMassKg: 58.0, waterPercentage: 55 }],
+          trainerNotes: [{ id: `tn-${Date.now()}`, date: 'Hoy', content: 'Cuenta de cliente registrada y activada en Supabase.' }]
+        };
+
+        setClients(prev => [newClient, ...prev]);
+        setActiveClientId(newClient.id);
+        supabaseDb.upsertClient(newClient).catch(() => {});
+      }
+
+      setAuthLoading(false);
+      const isConfirmed = createdUser?.identities && createdUser.identities.length > 0;
+      return { 
+        success: true, 
+        message: isConfirmed ? 'Cuenta creada y sesión iniciada con éxito en Supabase.' : 'Cuenta creada en Supabase. Si tienes confirmación de email activada, revisa tu bandeja de entrada.'
+      };
+    } catch (err: any) {
+      setAuthLoading(false);
+      return { success: false, error: err.message || 'Error al registrarse' };
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('Sign out warning:', e);
+    }
+    setSupabaseUser(null);
+    setSupabaseSession(null);
+    setUserRole(null);
+    localStorage.removeItem('strainer_user_role');
+  };
+
   const activeClient = clients.find(c => c.id === activeClientId) || clients[0];
 
   const updateClient = (id: string, partial: Partial<ClientData>) => {
-    setClients(prev => prev.map(c => c.id === id ? { ...c, ...partial } : c));
+    setClients(prev => {
+      const next = prev.map(c => {
+        if (c.id === id) {
+          const updated = { ...c, ...partial };
+          // Async sync to Supabase
+          supabaseDb.upsertClient(updated).catch(() => {});
+          return updated;
+        }
+        return c;
+      });
+      return next;
+    });
   };
 
   const addClient = (clientData: Partial<ClientData>) => {
@@ -199,6 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setClients(prev => [newClient, ...prev]);
     setActiveClientId(newId);
+    supabaseDb.upsertClient(newClient).catch(() => {});
   };
 
   const addTrainerNote = (clientId: string, content: string) => {
@@ -209,28 +616,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setClients(prev => prev.map(c => {
       if (c.id === clientId) {
-        return {
+        const updated = {
           ...c,
           trainerNotes: [newNote, ...c.trainerNotes]
         };
+        supabaseDb.upsertClient(updated).catch(() => {});
+        return updated;
       }
       return c;
     }));
   };
 
   const updateProgram = (program: Program) => {
-    setPrograms(prev => prev.map(p => p.id === program.id ? program : p));
+    setPrograms(prev => {
+      const next = prev.map(p => p.id === program.id ? program : p);
+      supabaseDb.upsertProgram(program).catch(() => {});
+      return next;
+    });
   };
 
   const addProgram = (program: Program) => {
-    setPrograms(prev => [program, ...prev]);
+    setPrograms(prev => {
+      const next = [program, ...prev];
+      supabaseDb.upsertProgram(program).catch(() => {});
+      return next;
+    });
   };
 
   const updateNutritionPlan = (clientId: string, plan: NutritionPlan) => {
-    setNutritionPlans(prev => ({
-      ...prev,
-      [clientId]: plan
-    }));
+    setNutritionPlans(prev => {
+      const next = { ...prev, [clientId]: plan };
+      supabaseDb.upsertNutritionPlan(clientId, plan).catch(() => {});
+      return next;
+    });
   };
 
   const toggleMealCompleted = (clientId: string, mealId: string) => {
@@ -238,6 +656,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const plan = prev[clientId] || INITIAL_NUTRITION_PLAN;
       const updatedMeals = plan.meals.map(m => m.id === mealId ? { ...m, completed: !m.completed } : m);
       const updatedPlan = { ...plan, meals: updatedMeals };
+      supabaseDb.upsertNutritionPlan(clientId, updatedPlan).catch(() => {});
       return { ...prev, [clientId]: updatedPlan };
     });
   };
@@ -254,23 +673,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return cat;
       });
-      return {
-        ...prev,
-        [clientId]: { ...plan, shoppingList: updatedCategories }
-      };
+      const updatedPlan = { ...plan, shoppingList: updatedCategories };
+      supabaseDb.upsertNutritionPlan(clientId, updatedPlan).catch(() => {});
+      return { ...prev, [clientId]: updatedPlan };
     });
   };
 
   const addFoodToLog = (clientId: string, foodName: string, kcal: number) => {
     setClients(prev => prev.map(c => {
       if (c.id === clientId) {
-        return {
+        const updated = {
           ...c,
           metrics: {
             ...c.metrics,
             kcalToday: c.metrics.kcalToday + kcal
           }
         };
+        supabaseDb.upsertClient(updated).catch(() => {});
+        return updated;
       }
       return c;
     }));
@@ -317,7 +737,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleMealCompleted,
         toggleShoppingItem,
         addFoodToLog,
-        resetAllData
+        resetAllData,
+        supabaseUser,
+        supabaseSession,
+        userRole,
+        authLoading,
+        supabaseStatus,
+        isRealtimeActive,
+        lastSyncTime,
+        signIn,
+        signUp,
+        signOut,
+        syncAllToSupabase,
+        refreshFromSupabase
       }}
     >
       {children}

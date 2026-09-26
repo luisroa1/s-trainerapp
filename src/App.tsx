@@ -4,6 +4,7 @@ import { ClientApp } from './components/client/ClientApp';
 import { TrainerApp } from './components/trainer/TrainerApp';
 import { TechSpecView } from './components/spec/TechSpecView';
 import { GitHubSyncModal } from './components/spec/GitHubSyncModal';
+import { SupabaseSyncModal } from './components/spec/SupabaseSyncModal';
 import { AccentColor } from './types';
 import { 
   Smartphone, 
@@ -13,7 +14,8 @@ import {
   UserCheck, 
   Maximize2, 
   Minimize2,
-  FolderGit2
+  FolderGit2,
+  Database
 } from 'lucide-react';
 
 const MainShell: React.FC = () => {
@@ -25,12 +27,51 @@ const MainShell: React.FC = () => {
     setActiveClientId, 
     accentColor, 
     setAccentColor,
-    resetAllData 
+    resetAllData,
+    supabaseUser,
+    userRole,
+    supabaseStatus,
+    isRealtimeActive
   } = useApp();
 
-  const [activeView, setActiveView] = useState<'client' | 'trainer' | 'spec'>('client');
+  const [activeView, setActiveView] = useState<'client' | 'trainer' | 'spec'>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      if (
+        hash.includes('activate') ||
+        hash.includes('type=invite') ||
+        hash.includes('type=recovery') ||
+        search.includes('activate') ||
+        search.includes('type=invite')
+      ) {
+        return 'client';
+      }
+    }
+    return 'client';
+  });
   const [deviceFrameMode, setDeviceFrameMode] = useState<boolean>(true);
+
+  // Escuchar cambios de hash (activación o invite)
+  React.useEffect(() => {
+    const handleUrlCheck = () => {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      if (
+        hash.includes('activate') ||
+        hash.includes('type=invite') ||
+        hash.includes('type=recovery') ||
+        search.includes('activate') ||
+        search.includes('type=invite')
+      ) {
+        setActiveView('client');
+      }
+    };
+    window.addEventListener('hashchange', handleUrlCheck);
+    return () => window.removeEventListener('hashchange', handleUrlCheck);
+  }, []);
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false);
+  const [showSupabaseModal, setShowSupabaseModal] = useState<boolean>(false);
   const [showAppNameModal, setShowAppNameModal] = useState<boolean>(false);
   const [tempAppName, setTempAppName] = useState<string>(appName);
 
@@ -121,10 +162,29 @@ const MainShell: React.FC = () => {
 
         {/* Right Controls */}
         <div className="flex items-center gap-2.5">
+          {/* Supabase Status & Action Button */}
+          <button
+            onClick={() => setShowSupabaseModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#5CD6FF] transition-all cursor-pointer"
+            title="Panel de Supabase & Base de Datos en tiempo real"
+          >
+            <Database className="w-3.5 h-3.5 text-[#5CD6FF]" />
+            <span className="hidden lg:inline">Supabase</span>
+            <span 
+              className={`w-2 h-2 rounded-full ${isRealtimeActive || supabaseStatus === 'connected' ? 'bg-[#CFFF5C] animate-pulse' : 'bg-[#FFD34D]'}`} 
+              title={supabaseStatus === 'connected' ? 'Supabase Conectado' : 'Supabase Conectado (Requiere tablas)'}
+            />
+            {supabaseUser && (
+              <span className="hidden xl:inline text-[9px] uppercase px-1.5 py-0.2 rounded bg-[#16161A] text-[#CFFF5C] border border-[#2A2A2F]">
+                {userRole || 'auth'}
+              </span>
+            )}
+          </button>
+
           {/* GitHub Action Button */}
           <button
             onClick={() => setShowGithubModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[var(--accent-color,#CFFF5C)] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[var(--accent-color,#CFFF5C)] transition-all cursor-pointer"
             title="Conectar y subir repositorio a GitHub"
           >
             <FolderGit2 className="w-3.5 h-3.5 text-[var(--accent-color,#CFFF5C)]" />
@@ -202,13 +262,13 @@ const MainShell: React.FC = () => {
                 </div>
                 {/* Screen Content */}
                 <div className="flex-1 pt-4 overflow-hidden flex flex-col">
-                  <ClientApp />
+                  <ClientApp onSwitchToTrainer={() => setActiveView('trainer')} />
                 </div>
               </div>
             ) : (
               /* Full Responsive Width */
               <div className="w-full max-w-[440px] flex-1 bg-[#101012] border-x border-[#2A2A2F] min-h-[844px] flex flex-col">
-                <ClientApp />
+                <ClientApp onSwitchToTrainer={() => setActiveView('trainer')} />
               </div>
             )}
           </div>
@@ -226,6 +286,12 @@ const MainShell: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Global Supabase Sync Modal */}
+      <SupabaseSyncModal
+        isOpen={showSupabaseModal}
+        onClose={() => setShowSupabaseModal(false)}
+      />
 
       {/* Global GitHub Sync Modal */}
       <GitHubSyncModal

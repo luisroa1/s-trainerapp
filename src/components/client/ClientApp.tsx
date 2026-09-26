@@ -15,10 +15,12 @@ import { ClientDataForm } from './ClientDataForm';
 import { ClientCycle } from './ClientCycle';
 import { ClientReminders } from './ClientReminders';
 import { ClientHelp } from './ClientHelp';
+import { ClientActivate } from './ClientActivate';
 
 type Tab = 'hoy' | 'entreno' | 'progreso' | 'nutricion' | 'perfil';
 type Screen =
   | 'onboarding'
+  | 'activate'
   | Tab
   | 'workout_exercise'
   | 'workout_rest'
@@ -32,14 +34,53 @@ type Screen =
   | 'recordatorios'
   | 'guia';
 
-export const ClientApp: React.FC = () => {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('hoy');
+interface ClientAppProps {
+  onSwitchToTrainer?: () => void;
+}
+
+export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
+  const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      if (
+        hash.includes('activate') ||
+        hash.includes('type=invite') ||
+        hash.includes('type=recovery') ||
+        search.includes('activate') ||
+        search.includes('type=invite')
+      ) {
+        return 'activate';
+      }
+    }
+    return 'hoy';
+  });
   const [activeTab, setActiveTab] = useState<Tab>('hoy');
   const [lastRestInfo, setLastRestInfo] = useState<{ setNum: number; weight: number; reps: number }>({
     setNum: 2,
     weight: 82.5,
     reps: 7
   });
+
+  // Listen to hash changes if an invite link is clicked or updated
+  React.useEffect(() => {
+    const handleHashCheck = () => {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      if (
+        hash.includes('activate') ||
+        hash.includes('type=invite') ||
+        hash.includes('type=recovery') ||
+        search.includes('activate') ||
+        search.includes('type=invite')
+      ) {
+        setCurrentScreen('activate');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashCheck);
+    return () => window.removeEventListener('hashchange', handleHashCheck);
+  }, []);
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -61,8 +102,21 @@ export const ClientApp: React.FC = () => {
     <div className="relative w-full h-full bg-[#101012] text-[#F5F4F0] flex flex-col overflow-hidden">
       {/* Screen View Container */}
       <div className="flex-1 overflow-y-auto">
+        {currentScreen === 'activate' && (
+          <ClientActivate
+            onFinishActivation={() => {
+              setActiveTab('hoy');
+              setCurrentScreen('hoy');
+            }}
+            onGoToLogin={() => setCurrentScreen('onboarding')}
+          />
+        )}
+
         {currentScreen === 'onboarding' && (
-          <ClientOnboarding onFinishOnboarding={() => setCurrentScreen('hoy')} />
+          <ClientOnboarding 
+            onFinishOnboarding={() => setCurrentScreen('hoy')} 
+            onNavigateToTrainer={onSwitchToTrainer}
+          />
         )}
 
         {currentScreen === 'hoy' && (

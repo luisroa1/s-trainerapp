@@ -22,8 +22,13 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
   onNavigateSubscreen,
   onLogout
 }) => {
-  const { activeClient, updateClientPhoto } = useApp();
+  const { activeClient, updateClientPhoto, supabaseUser, userRole, signOut, supabaseStatus } = useApp();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleLogout = async () => {
+    await signOut();
+    onLogout();
+  };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,6 +83,15 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
           <p className="text-xs text-[#8E8E94] mt-0.5">
             {activeClient.objective}
           </p>
+          {supabaseUser && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-[#CFFF5C]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CFFF5C] animate-pulse" />
+              <span className="truncate max-w-[170px]">{supabaseUser.email}</span>
+              <span className="px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider bg-[#1B1B1F] border border-[#2A2A2F] text-[#F5F4F0]">
+                {userRole || 'cliente'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -201,10 +215,10 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
       {/* Cerrar sesión */}
       <div className="mt-8 text-center">
         <button
-          onClick={onLogout}
-          className="text-xs font-bold text-[#FF6B4A] hover:underline"
+          onClick={handleLogout}
+          className="text-xs font-bold text-[#FF6B4A] hover:underline cursor-pointer"
         >
-          Cerrar sesión
+          Cerrar sesión de Supabase
         </button>
       </div>
     </div>

@@ -17,14 +17,14 @@ interface GitHubSyncModalProps {
 }
 
 export const GitHubSyncModal: React.FC<GitHubSyncModalProps> = ({ isOpen, onClose }) => {
-  const [repoUrl, setRepoUrl] = useState('https://github.com/luisroa1/s-trainer-app.git');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/luisroa1/s-trainerapp.git');
   const [personalToken, setPersonalToken] = useState('');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   if (!isOpen) return null;
 
   const authenticatedPushCmd = personalToken.trim()
-    ? `git push https://${personalToken.trim()}@github.com/luisroa1/s-trainer-app.git main`
+    ? `git push https://${personalToken.trim()}@github.com/luisroa1/s-trainerapp.git main`
     : `git push -u origin main`;
 
   const terminalCommands = [
@@ -82,7 +82,7 @@ ${authenticatedPushCmd}
               Sincronización con GitHub
             </h2>
             <p className="text-xs text-[#8E8E94]">
-              Repositorio vinculado: <span className="text-[#F5F4F0] font-semibold">luisroa1/s-trainer-app</span>
+              Repositorio vinculado: <span className="text-[#F5F4F0] font-semibold">luisroa1/s-trainerapp</span>
             </p>
           </div>
         </div>
@@ -91,8 +91,11 @@ ${authenticatedPushCmd}
         <div className="p-3.5 rounded-xl bg-[#101012] border border-[var(--accent-color,#CFFF5C)]/40 mb-4 flex items-start gap-3">
           <CheckCircle2 className="w-4 h-4 text-[var(--accent-color,#CFFF5C)] shrink-0 mt-0.5" />
           <div className="text-xs text-[#8E8E94]">
-            <span className="font-bold text-[#F5F4F0] block">Repositorio remoto origin configurado con éxito</span>
+            <span className="font-bold text-[#F5F4F0] block">Repositorio remoto origin configurado y commit creado en main</span>
             <code className="text-[#CFFF5C] text-[11px] block mt-0.5">{repoUrl}</code>
+            <div className="mt-2 p-2 rounded-lg bg-[#1B1B1F] border border-[#2A2A2F] text-[11px] text-[#F5F4F0] font-mono">
+              <span className="text-[#CFFF5C] font-bold">Commit 16e5cce:</span> feat: Integrar autenticación y base de datos en tiempo real con Supabase (@supabase/supabase-js) y roles de usuario
+            </div>
           </div>
         </div>
 

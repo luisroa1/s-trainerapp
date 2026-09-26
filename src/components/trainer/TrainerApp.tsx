@@ -37,11 +37,24 @@ type TrainerNavSection =
   | 'guide';
 
 export const TrainerApp: React.FC = () => {
-  const { clients, programs, appName, trainer, updateTrainer } = useApp();
+  const { 
+    clients, 
+    programs, 
+    appName, 
+    trainer, 
+    updateTrainer, 
+    supabaseUser, 
+    userRole, 
+    signOut, 
+    supabaseStatus,
+    isRealtimeActive,
+    syncAllToSupabase
+  } = useApp();
   const [activeSection, setActiveSection] = useState<TrainerNavSection>('dashboard');
   const [selectedClient, setSelectedClient] = useState<ClientData>(clients[0]);
   const [selectedProgram, setSelectedProgram] = useState<Program>(programs[0]);
   const [nutritionClientId, setNutritionClientId] = useState<string>(clients[0]?.id || 'cli-juan');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Trainer profile editing state
   const [showTrainerModal, setShowTrainerModal] = useState(false);
@@ -49,6 +62,12 @@ export const TrainerApp: React.FC = () => {
   const [trainerRole, setTrainerRole] = useState(trainer.role);
   const [trainerAvatar, setTrainerAvatar] = useState(trainer.avatarUrl || '');
   const trainerFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await syncAllToSupabase();
+    setIsSyncing(false);
+  };
 
   const handleTrainerPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,9 +128,25 @@ export const TrainerApp: React.FC = () => {
                 {appName}
               </span>
             </div>
-            <p className="text-[7.5px] tracking-widest text-[#8E8E94] font-bold uppercase leading-tight">
+            <p className="text-[7.5px] tracking-widest text-[#8E8E94] font-bold uppercase leading-tight mb-3">
               PLANIFICACIÓN · ADHERENCIA · PROGRESIÓN
             </p>
+            
+            {/* Supabase Status Pill */}
+            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#1B1B1F] border border-[#2A2A2F] text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${isRealtimeActive ? 'bg-[#CFFF5C] animate-pulse' : 'bg-[#FFD34D]'}`} />
+                <span className="font-semibold text-[#F5F4F0]">Supabase Realtime</span>
+              </div>
+              <button
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="text-[9px] text-[var(--accent-color,#CFFF5C)] hover:underline cursor-pointer disabled:opacity-50"
+                title="Sincronizar base de datos completa"
+              >
+                {isSyncing ? 'Sincronizando...' : 'Sync'}
+              </button>
+            </div>
           </div>
 
           {/* Navigation Links */}
@@ -326,6 +361,33 @@ export const TrainerApp: React.FC = () => {
                   onChange={e => setTrainerRole(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
                 />
+              </div>
+
+              {/* Supabase account card */}
+              <div className="p-3 rounded-xl bg-[#101012] border border-[#2A2A2F]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider">
+                    Cuenta Supabase
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#1B1B1F] text-[#CFFF5C] font-semibold border border-[#2A2A2F]">
+                    {userRole || 'Entrenador'}
+                  </span>
+                </div>
+                <div className="text-xs text-[#F5F4F0] truncate font-mono">
+                  {supabaseUser?.email || trainer.email}
+                </div>
+                {supabaseUser && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await signOut();
+                      setShowTrainerModal(false);
+                    }}
+                    className="mt-2 text-xs text-[#FF6B4A] hover:underline font-semibold cursor-pointer block"
+                  >
+                    Cerrar sesión de Supabase
+                  </button>
+                )}
               </div>
             </div>
 

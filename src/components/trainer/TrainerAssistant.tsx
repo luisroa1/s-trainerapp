@@ -3,12 +3,13 @@ import { Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const TrainerAssistant: React.FC = () => {
-  const { clients } = useApp();
+  const { clients, trainer } = useApp();
   const [query, setQuery] = useState('');
+  const trainerFirstName = trainer.name ? trainer.name.split(' ')[0] : 'Entrenador';
   const [messages, setMessages] = useState<{ sender: 'ai' | 'user'; text: string }[]>([
     {
       sender: 'ai',
-      text: 'Hola Jesús. Puedo ayudarte a analizar el progreso de tus clientes usando los datos de tu panel. Pregúntame lo que necesites.'
+      text: `Hola ${trainerFirstName}. Puedo ayudarte a analizar el progreso de tus clientes usando los datos de tu panel. Pregúntame lo que necesites.`
     },
     {
       sender: 'user',

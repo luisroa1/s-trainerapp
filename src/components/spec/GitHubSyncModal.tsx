@@ -94,7 +94,7 @@ ${authenticatedPushCmd}
             <span className="font-bold text-[#F5F4F0] block">Repositorio remoto origin configurado y commit creado en main</span>
             <code className="text-[#CFFF5C] text-[11px] block mt-0.5">{repoUrl}</code>
             <div className="mt-2 p-2 rounded-lg bg-[#1B1B1F] border border-[#2A2A2F] text-[11px] text-[#F5F4F0] font-mono">
-              <span className="text-[#CFFF5C] font-bold">Commit 16e5cce:</span> feat: Integrar autenticación y base de datos en tiempo real con Supabase (@supabase/supabase-js) y roles de usuario
+              <span className="text-[#CFFF5C] font-bold">Commit d7b6a19:</span> feat: Implementar autenticación real de entrenador con Supabase Auth (TrainerLogin), verificación de rol y eliminación de mock local
             </div>
           </div>
         </div>

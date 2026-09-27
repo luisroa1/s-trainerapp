@@ -150,8 +150,8 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
   const handleSelectRolePreset = (role: UserRole) => {
     setSelectedRole(role);
     if (role === 'trainer') {
-      setEmail('entrenador@strainer.com');
-      setFullName('Jesús Entrenador');
+      setEmail('entrenador.test@strainerapp.dev');
+      setFullName('Entrenador');
     } else {
       setEmail('juan.rodriguez@email.com');
       setFullName('Juan Rodríguez');

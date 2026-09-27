@@ -47,9 +47,9 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
   // Quick auth states
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authRole, setAuthRole] = useState<UserRole>('trainer');
-  const [email, setEmail] = useState('entrenador@strainer.com');
+  const [email, setEmail] = useState('entrenador.test@strainerapp.dev');
   const [password, setPassword] = useState('Password123!');
-  const [fullName, setFullName] = useState('Jesús Entrenador');
+  const [fullName, setFullName] = useState('Entrenador Principal');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);

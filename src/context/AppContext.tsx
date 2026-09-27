@@ -5,10 +5,10 @@ import { INITIAL_CLIENTS, INITIAL_PROGRAMS, INITIAL_NUTRITION_PLAN } from '../da
 import { supabase, supabaseDb } from '../lib/supabase';
 
 const INITIAL_TRAINER: TrainerProfile = {
-  id: 'trn-1',
-  name: 'Jesús S.',
-  email: 'soyroafit@gmail.com',
-  initials: 'JS',
+  id: '',
+  name: '',
+  email: '',
+  initials: 'TR',
   role: 'Entrenador',
   avatarUrl: '',
   couponCode: 'STRAINER20'
@@ -75,7 +75,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [trainer, setTrainer] = useState<TrainerProfile>(() => {
     const saved = localStorage.getItem('strainer_trainer');
-    return saved ? JSON.parse(saved) : INITIAL_TRAINER;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed?.name?.includes('Jesús') || parsed?.email?.includes('soyroafit') || !parsed?.id) {
+          localStorage.removeItem('strainer_trainer');
+          return INITIAL_TRAINER;
+        }
+        return parsed;
+      } catch {
+        return INITIAL_TRAINER;
+      }
+    }
+    return INITIAL_TRAINER;
   });
 
   const [clients, setClients] = useState<ClientData[]>(() => {
@@ -120,11 +132,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTrainer(prev => {
       const updated = { ...prev, ...partial };
       if (partial.name && !partial.initials) {
-        updated.initials = partial.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+        updated.initials = partial.name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
       }
-      localStorage.setItem('strainer_trainer', JSON.stringify(updated));
-      // Asynchronously sync to Supabase
-      supabaseDb.upsertTrainerProfile(updated).catch(() => {});
+      if (updated.id) {
+        localStorage.setItem('strainer_trainer', JSON.stringify(updated));
+        // Asynchronously sync to Supabase profiles
+        supabase
+          .from('profiles')
+          .update({
+            full_name: updated.name,
+            avatar_url: updated.avatarUrl,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', updated.id)
+          .then(() => {});
+      }
       return updated;
     });
   };
@@ -139,7 +161,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [appName]);
 
   useEffect(() => {
-    localStorage.setItem('strainer_trainer', JSON.stringify(trainer));
+    if (trainer.id) {
+      localStorage.setItem('strainer_trainer', JSON.stringify(trainer));
+    } else {
+      localStorage.removeItem('strainer_trainer');
+    }
   }, [trainer]);
 
   useEffect(() => {
@@ -240,12 +266,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 1. Get initial session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (!isMounted) return;
-      if (session) {
+      if (session?.user) {
         setSupabaseSession(session);
         setSupabaseUser(session.user);
-        const role = (session.user.user_metadata?.role as UserRole) || 'client';
-        setUserRole(role);
-        localStorage.setItem('strainer_user_role', role);
+        supabase
+          .from('profiles')
+          .select('id, role, full_name, email, avatar_url')
+          .eq('id', session.user.id)
+          .maybeSingle()
+          .then(({ data: profile }) => {
+            if (!isMounted) return;
+            const role = (profile?.role as UserRole) || (session.user.user_metadata?.role as UserRole) || 'client';
+            setUserRole(role);
+            localStorage.setItem('strainer_user_role', role);
+
+            if (role === 'trainer' && profile) {
+              const fullName = profile.full_name || session.user.user_metadata?.full_name || profile.email?.split('@')[0] || 'Entrenador';
+              const initials = fullName.split(' ').filter(Boolean).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || 'TR';
+              setTrainer({
+                id: profile.id,
+                name: fullName,
+                email: profile.email || session.user.email || '',
+                initials,
+                role: 'Entrenador',
+                avatarUrl: profile.avatar_url || '',
+                couponCode: 'STRAINER20'
+              });
+            }
+          });
       }
       setAuthLoading(false);
     });
@@ -256,20 +304,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupabaseSession(session);
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
-        const role = (session.user.user_metadata?.role as UserRole) || 'client';
-        setUserRole(role);
-        localStorage.setItem('strainer_user_role', role);
+        supabase
+          .from('profiles')
+          .select('id, role, full_name, email, avatar_url')
+          .eq('id', session.user.id)
+          .maybeSingle()
+          .then(({ data: profile }) => {
+            if (!isMounted) return;
+            const role = (profile?.role as UserRole) || (session.user.user_metadata?.role as UserRole) || 'client';
+            setUserRole(role);
+            localStorage.setItem('strainer_user_role', role);
+
+            if (role === 'trainer' && profile) {
+              const fullName = profile.full_name || session.user.user_metadata?.full_name || profile.email?.split('@')[0] || 'Entrenador';
+              const initials = fullName.split(' ').filter(Boolean).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || 'TR';
+              setTrainer({
+                id: profile.id,
+                name: fullName,
+                email: profile.email || session.user.email || '',
+                initials,
+                role: 'Entrenador',
+                avatarUrl: profile.avatar_url || '',
+                couponCode: 'STRAINER20'
+              });
+            }
+          });
         
         // If client logs in, match active client by email if found
-        if (role === 'client' && session.user.email) {
-          const matched = clients.find(c => c.email.toLowerCase() === session.user.email?.toLowerCase());
+        const userEmail = session.user.email;
+        if (userEmail) {
+          const matched = clients.find(c => c.email.toLowerCase() === userEmail.toLowerCase());
           if (matched) {
             setActiveClientId(matched.id);
           }
         }
       } else {
         setUserRole(null);
+        setTrainer(INITIAL_TRAINER);
         localStorage.removeItem('strainer_user_role');
+        localStorage.removeItem('strainer_trainer');
       }
       setAuthLoading(false);
     });
@@ -516,7 +589,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupabaseUser(null);
     setSupabaseSession(null);
     setUserRole(null);
+    setTrainer(INITIAL_TRAINER);
     localStorage.removeItem('strainer_user_role');
+    localStorage.removeItem('strainer_trainer');
   };
 
   const activeClient = clients.find(c => c.id === activeClientId) || clients[0];

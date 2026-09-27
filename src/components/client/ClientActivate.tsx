@@ -111,8 +111,28 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
 
       const userEmail = data.user?.email || resolvedEmail;
 
-      // 2. Actualizar el estado en la tabla clients a 'Activo'
-      if (userEmail) {
+      // 2. Actualizar el estado en la tabla clients a 'Activo'.
+      //    Se usa la Edge Function 'activate-client' (service_role) como
+      //    vía principal y fiable, ya que evita cualquier ambigüedad de
+      //    RLS/sesión en el update hecho directamente desde el navegador.
+      let activationConfirmed = false;
+      try {
+        const { data: activateData, error: activateError } = await supabase.functions.invoke(
+          'activate-client',
+          { body: {} }
+        );
+        if (activateError) {
+          console.warn('Advertencia: activate-client Edge Function falló:', activateError);
+        } else if (activateData?.success) {
+          activationConfirmed = true;
+        }
+      } catch (fnErr) {
+        console.warn('Advertencia invocando activate-client:', fnErr);
+      }
+
+      // Respaldo: si por lo que sea la Edge Function no confirmó el cambio,
+      // se intenta también el update directo (best-effort, no bloqueante).
+      if (!activationConfirmed && userEmail) {
         try {
           await supabase
             .from('clients')
@@ -125,11 +145,11 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
         } catch (dbErr) {
           console.warn('Advertencia actualizando estado en tabla clients:', dbErr);
         }
+      }
 
-        // Si tenemos un cliente activo en contexto, actualizarlo
-        if (activeClient && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
-          updateClient(activeClient.id, { status: 'Activo' });
-        }
+      // Si tenemos un cliente activo en contexto, actualizarlo
+      if (userEmail && activeClient && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
+        updateClient(activeClient.id, { status: 'Activo' });
       }
 
       // Limpiar hash de activación de la URL

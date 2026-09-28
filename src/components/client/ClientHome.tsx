@@ -31,6 +31,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
   // Buscar el día actual en el calendario semanal del cliente
   const todaySchedule = weeklySchedule.find(s => s.day === currentDayCode);
   const isRestDay = todaySchedule ? todaySchedule.status === 'rest' : false;
+  const isTodayCompleted = todaySchedule ? todaySchedule.status === 'completed' : false;
 
   // Determinar sesión del programa asignado
   const workoutDaysInSchedule = weeklySchedule.filter(s => s.status !== 'rest');
@@ -344,6 +345,34 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
               </p>
             </div>
+          </div>
+        ) : isTodayCompleted ? (
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 text-[#101012] stroke-[3]" />
+              </div>
+              <h3 className="text-2xl font-extrabold font-display text-emerald-500 leading-tight">
+                Entrenamiento completado
+              </h3>
+            </div>
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+              {`Has completado ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'} hoy · ${currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}`}
+            </p>
+            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
+              <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#8E8E94] leading-relaxed">
+                <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
+              </p>
+            </div>
+            <button
+              onClick={onStartWorkout}
+              style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+              className="w-full py-3.5 rounded-full font-extrabold text-sm shadow-md transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 fill-current" />
+              {hasActiveSession ? 'Continuar entrenamiento' : 'Empezar entrenamiento'}
+            </button>
           </div>
         ) : (
           <div>

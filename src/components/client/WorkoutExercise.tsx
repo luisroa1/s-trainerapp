@@ -103,6 +103,13 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
     rir: number;
   } | null>(null);
   const [workoutCompleteScreen, setWorkoutCompleteScreen] = useState(false);
+  // Pantalla de resumen previa al primer ejercicio: solo se muestra al
+  // arrancar una sesión nueva (nada registrado todavía). Es una capa
+  // puramente visual, calculada una vez al montar; no altera
+  // workoutProgress ni su lógica de arranque/reanudación.
+  const [showIntro, setShowIntro] = useState(
+    () => currentExerciseIndex === 0 && activeSetIndex === 0 && completedSets.length === 0
+  );
 
   // Cuando cambia el ejercicio activo o la serie activa, los inputs se
   // rellenan con el objetivo correspondiente (genérico, no hardcodeado).
@@ -204,6 +211,65 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
       setWorkoutCompleteScreen(true);
     }
   };
+
+  // Resumen del entrenamiento de hoy, antes de entrar al primer ejercicio.
+  if (showIntro && todaysDay && totalExercises > 0) {
+    return (
+      <div className="flex flex-col min-h-full pb-10 px-5 pt-3 bg-[#101012] text-[#F5F4F0]">
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={onBack}
+            className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0]"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <span className="text-[11px] font-bold tracking-widest text-[#8E8E94] uppercase">
+            RESUMEN
+          </span>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0]"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <h2 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight mt-2">
+          {todaysDay.focusArea || todaysDay.title}
+        </h2>
+        <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-4">
+          {`${totalExercises} ejercicio${totalExercises === 1 ? '' : 's'} · ${todaysDay.title}`}
+        </p>
+
+        <div className="flex flex-col gap-2.5">
+          {exercises.map((ex, idx) => (
+            <div
+              key={ex.id}
+              className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center gap-3"
+            >
+              <div className="w-7 h-7 rounded-full bg-[#16161A] border border-[#2A2A2F] flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-[#8E8E94]">{idx + 1}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-[#F5F4F0] truncate">{ex.name}</p>
+                <p className="text-[11px] text-[#8E8E94] font-medium">
+                  {`${ex.muscleGroup} · ${ex.sets} × ${ex.reps} · ${ex.weight} · RIR ${ex.rir}`}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setShowIntro(false)}
+          style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+          className="w-full py-4 rounded-full font-bold text-base shadow-lg transition-transform active:scale-[0.98] mt-6"
+        >
+          Comenzar
+        </button>
+      </div>
+    );
+  }
 
   // Sin programa asignado o sin ejercicios en el día: estado vacío real,
   // no un fallback con datos inventados.

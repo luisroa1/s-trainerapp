@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, X, Play, MessageSquare, Check, Clock } from 'lucide-react';
+import { ArrowLeft, X, Play, MessageSquare, Check, Clock, Minus, Plus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { WorkoutSetRecord, ProgramDay } from '../../types';
 
@@ -506,24 +506,45 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
             return (
               <div key={idx} className="p-3 rounded-[14px] bg-[#1B1B1F] border-2 border-[var(--accent-color,#CFFF5C)] flex items-center justify-between shadow-lg">
                 <span className="text-xs font-bold text-[#F5F4F0]">Serie {setNumber}</span>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center bg-[#101012] border border-[#2A2A2F] rounded-lg px-2 py-1">
-                    <input
-                      type="number"
-                      value={activeSetWeight}
-                      onChange={e => setActiveSetWeight(Number(e.target.value))}
-                      className="w-10 text-xs font-bold text-[#F5F4F0] bg-transparent text-center focus:outline-none"
-                    />
-                    <span className="text-[10px] text-[#8E8E94]">kg</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-0.5 bg-[#101012] border border-[#2A2A2F] rounded-lg px-1 py-1">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSetWeight(w => Math.max(0, w - 1))}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] active:scale-90"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="text-xs font-bold text-[#F5F4F0] w-9 text-center leading-none">
+                      {activeSetWeight}
+                      <span className="text-[9px] text-[#8E8E94] font-medium ml-0.5">kg</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSetWeight(w => w + 1)}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] active:scale-90"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
                   </div>
-                  <div className="flex items-center bg-[#101012] border border-[#2A2A2F] rounded-lg px-2 py-1">
-                    <input
-                      type="number"
-                      value={activeSetReps}
-                      onChange={e => setActiveSetReps(Number(e.target.value))}
-                      className="w-7 text-xs font-bold text-[#F5F4F0] bg-transparent text-center focus:outline-none"
-                    />
-                    <span className="text-[10px] text-[#8E8E94]">reps</span>
+                  <div className="flex items-center gap-0.5 bg-[#101012] border border-[#2A2A2F] rounded-lg px-1 py-1">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSetReps(r => Math.max(0, r - 1))}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] active:scale-90"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="text-xs font-bold text-[#F5F4F0] w-7 text-center leading-none">
+                      {activeSetReps}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSetReps(r => r + 1)}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] active:scale-90"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
                   </div>
                   <button
                     onClick={handleRegisterSet}

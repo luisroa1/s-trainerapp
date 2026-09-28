@@ -41,12 +41,6 @@ export const ClientProgress: React.FC<ClientProgressProps> = ({
         {/* Weight linear trend SVG chart */}
         <div className="relative w-full h-24 mb-3">
           <svg className="w-full h-full overflow-visible" viewBox="0 0 320 80">
-            <defs>
-              <linearGradient id="weightLineGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#5CD6FF" />
-                <stop offset="100%" stopColor="#5CD6FF" stopOpacity="0.4" />
-              </linearGradient>
-            </defs>
             {/* Background horizontal guideline */}
             <line x1="0" y1="65" x2="320" y2="65" stroke="#2A2A2F" strokeDasharray="3 3" strokeWidth="1" />
             {/* Smooth downward trend curve */}

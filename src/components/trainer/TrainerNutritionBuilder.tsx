@@ -16,7 +16,17 @@ export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = (
 }) => {
   const { clients, nutritionPlans, updateNutritionPlan } = useApp();
   const client = clients.find(c => c.id === clientId) || clients[0];
-  const initialPlan = nutritionPlans[clientId] || nutritionPlans['cli-juan'];
+  const initialPlan = nutritionPlans[clientId] || {
+    id: `nut-${clientId || 'nuevo'}`,
+    clientId: clientId || '',
+    clientName: client?.name || 'Cliente',
+    objective: client?.objective || 'Pérdida de grasa',
+    dietType: 'Omnívora',
+    targetKcal: 2000,
+    macros: { protein: 140, carbs: 200, fat: 65, fiber: 25, water: 2.5 },
+    meals: [],
+    shoppingList: []
+  };
 
   const [plan, setPlan] = useState<NutritionPlan>(initialPlan);
   const [editingMealIndex, setEditingMealIndex] = useState<number | null>(null);

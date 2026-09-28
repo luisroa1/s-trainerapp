@@ -44,37 +44,42 @@ export const TrainerLogin: React.FC<TrainerLoginProps> = ({
         return;
       }
 
-      // 2. Verificar rol en la tabla profiles
+      // 2. Verificar rol en la tabla profiles (permitir 'trainer' y 'admin')
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id, role, full_name, email, avatar_url')
         .eq('id', data.user.id)
         .maybeSingle();
 
-      if (profileError || !profile || profile.role !== 'trainer') {
-        // El usuario no tiene rol trainer: cerrar sesión inmediatamente
+      if (profileError || !profile || (profile.role !== 'trainer' && profile.role !== 'admin')) {
+        // El usuario no tiene rol trainer ni admin: cerrar sesión inmediatamente
         await supabase.auth.signOut();
         setIsLoading(false);
-        setErrorMessage('Acceso denegado: Esta cuenta no tiene permisos de entrenador.');
+        setErrorMessage('Acceso denegado: Esta cuenta no tiene permisos de entrenador o administrador.');
         return;
       }
 
-      // 3. Sincronizar datos reales del entrenador
-      const fullName = profile.full_name || data.user.user_metadata?.full_name || profile.email?.split('@')[0] || 'Entrenador';
+      // Guardar rol en localStorage igual que se hace para trainer
+      localStorage.setItem('strainer_user_role', profile.role);
+
+      // 3. Sincronizar datos reales del entrenador o administrador
+      const isRoleAdmin = profile.role === 'admin';
+      const roleDisplay = isRoleAdmin ? 'Administrador' : 'Entrenador';
+      const fullName = profile.full_name || data.user.user_metadata?.full_name || profile.email?.split('@')[0] || roleDisplay;
       const initials = fullName
         .split(' ')
         .filter(Boolean)
         .map((w: string) => w[0])
         .slice(0, 2)
         .join('')
-        .toUpperCase() || 'TR';
+        .toUpperCase() || (isRoleAdmin ? 'AD' : 'TR');
 
       updateTrainer({
         id: profile.id,
         name: fullName,
         email: profile.email || data.user.email || '',
         initials,
-        role: 'Entrenador',
+        role: roleDisplay,
         avatarUrl: profile.avatar_url || '',
       });
 
@@ -103,7 +108,7 @@ export const TrainerLogin: React.FC<TrainerLoginProps> = ({
 
           <span className="text-[10px] tracking-widest text-[#8E8E94] font-bold uppercase mb-1 flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-[var(--accent-color,#CFFF5C)]" />
-            <span>ACCESO DE ENTRENADOR</span>
+            <span>ACCESO DE ENTRENADOR O ADMIN</span>
           </span>
 
           <h2 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">

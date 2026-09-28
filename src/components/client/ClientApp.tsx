@@ -3,6 +3,7 @@ import { Home, Dumbbell, TrendingUp, Apple, User } from 'lucide-react';
 import { ClientOnboarding } from './ClientOnboarding';
 import { ClientHome } from './ClientHome';
 import { WorkoutExercise } from './WorkoutExercise';
+import type { WorkoutProgress, RecordedSetInfo } from './WorkoutExercise';
 import { WorkoutRest } from './WorkoutRest';
 import { ClientProgress } from './ClientProgress';
 import { ClientMeasurements } from './ClientMeasurements';
@@ -56,10 +57,29 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
     return 'hoy';
   });
   const [activeTab, setActiveTab] = useState<Tab>('hoy');
-  const [lastRestInfo, setLastRestInfo] = useState<{ setNum: number; weight: number; reps: number }>({
-    setNum: 2,
-    weight: 82.5,
-    reps: 7
+
+  // Fuente de verdad del progreso del entrenamiento en curso. Vive aquí (en
+  // ClientApp, que nunca se desmonta) precisamente para sobrevivir a la
+  // navegación WorkoutExercise -> WorkoutRest -> WorkoutExercise, sea cual
+  // sea el ejercicio, el número de series o el entrenamiento.
+  const [workoutProgress, setWorkoutProgress] = useState<WorkoutProgress>({
+    sessionActive: false,
+    currentExerciseIndex: 0,
+    activeSetIndex: 0,
+    completedSets: []
+  });
+
+  // Solo para mostrar en WorkoutRest qué serie se acaba de completar y cuál
+  // es el objetivo de la siguiente. NO es el estado fuente de verdad del
+  // entrenamiento (ese es workoutProgress, arriba).
+  const [lastRestInfo, setLastRestInfo] = useState<RecordedSetInfo>({
+    setNum: 0,
+    weight: 0,
+    reps: 0,
+    targetSets: 0,
+    targetWeight: 0,
+    targetReps: 0,
+    targetRir: 0
   });
 
   // Listen to hash changes if an invite link is clicked or updated
@@ -121,7 +141,23 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
 
         {currentScreen === 'hoy' && (
           <ClientHome
+            hasActiveSession={workoutProgress.sessionActive}
             onStartWorkout={() => {
+              // Si ya hay una sesión activa (p.ej. el usuario volvió con
+              // "←" desde WorkoutExercise), "Continuar entrenamiento" debe
+              // retomar exactamente donde se quedó: no se reinicia el
+              // progreso. Solo se reinicia cuando no hay sesión en curso
+              // (entrenamiento nuevo o el anterior ya se completó).
+              setWorkoutProgress(prev =>
+                prev.sessionActive
+                  ? prev
+                  : {
+                      sessionActive: true,
+                      currentExerciseIndex: 0,
+                      activeSetIndex: 0,
+                      completedSets: []
+                    }
+              );
               setActiveTab('entreno');
               setCurrentScreen('workout_exercise');
             }}
@@ -133,6 +169,8 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
           <WorkoutExercise
             onBack={() => setCurrentScreen('hoy')}
             onClose={() => setCurrentScreen('hoy')}
+            progress={workoutProgress}
+            onProgressChange={setWorkoutProgress}
             onGoToRest={(info) => {
               setLastRestInfo(info);
               setCurrentScreen('workout_rest');

@@ -8,10 +8,11 @@ interface ClientShoppingListProps {
 
 export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }) => {
   const { activeClient, nutritionPlans, toggleShoppingItem } = useApp();
-  const currentPlan = nutritionPlans[activeClient.id] || nutritionPlans['cli-juan'];
+  const currentPlan = activeClient ? nutritionPlans[activeClient.id] : undefined;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleShare = () => {
+    if (!currentPlan?.shoppingList || currentPlan.shoppingList.length === 0) return;
     const textToShare = currentPlan.shoppingList
       .map(cat => `${cat.category}:\n${cat.items.map(i => `• ${i.name}`).join('\n')}`)
       .join('\n\n');
@@ -60,6 +61,13 @@ export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }
       )}
 
       {/* Categorized List */}
+      {(!currentPlan?.shoppingList || currentPlan.shoppingList.length === 0) ? (
+        <div className="p-8 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] text-center my-6">
+          <p className="text-xs text-[#8E8E94]">
+            No hay ingredientes en tu lista de la compra. Se generarán automáticamente con tu plan nutricional.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-5">
         {currentPlan.shoppingList.map((cat, catIdx) => (
           <div key={catIdx}>
@@ -71,7 +79,7 @@ export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }
               {cat.items.map((item, itemIdx) => (
                 <div
                   key={itemIdx}
-                  onClick={() => toggleShoppingItem(activeClient.id, cat.category, item.name)}
+                  onClick={() => activeClient && toggleShoppingItem(activeClient.id, cat.category, item.name)}
                   className="px-4 py-3.5 flex items-center gap-3.5 cursor-pointer hover:bg-[#232328]/50 transition-colors"
                 >
                   <div
@@ -97,6 +105,7 @@ export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 };

@@ -37,20 +37,59 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
 
     async function checkSession() {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.warn('Error obteniendo sesión de activación:', error);
+        const rawHash = window.location.hash;
+        let cleanHash = rawHash.startsWith('#') ? rawHash.substring(1) : rawHash;
+        if (cleanHash.includes('access_token=')) {
+          cleanHash = cleanHash.substring(cleanHash.indexOf('access_token='));
+        } else if (cleanHash.includes('?')) {
+          cleanHash = cleanHash.substring(cleanHash.indexOf('?') + 1);
         }
 
-        if (session?.user?.email && isMounted) {
-          setResolvedEmail(session.user.email);
-        } else if (supabaseUser?.email && isMounted) {
-          setResolvedEmail(supabaseUser.email);
-        } else if (activeClient?.email && isMounted) {
-          setResolvedEmail(activeClient.email);
+        const params = new URLSearchParams(cleanHash);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken) {
+          // 1. Prioridad total: Extraer tokens del hash e inicializar la sesión explícita
+          const { data: setData, error: setError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+
+          if (setError || !setData?.session?.user?.email) {
+            console.warn('Error al establecer sesión desde hash de invitación:', setError);
+            if (isMounted) {
+              setResolvedEmail('');
+              setErrorMessage('El enlace de activación no es válido o ha caducado. Solicita una nueva invitación.');
+            }
+            return;
+          }
+
+          if (isMounted) {
+            setResolvedEmail(setData.session.user.email);
+            setErrorMessage(null);
+          }
+        } else {
+          // 2. Solo si NO hay access_token en el hash (ej. recarga tras procesar), usar sesión como respaldo
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) {
+            console.warn('Error obteniendo sesión de activación:', sessionError);
+          }
+
+          if (session?.user?.email && isMounted) {
+            setResolvedEmail(session.user.email);
+            setErrorMessage(null);
+          } else if (isMounted) {
+            setResolvedEmail('');
+            setErrorMessage('El enlace de activación no es válido o ha caducado. Solicita una nueva invitación.');
+          }
         }
       } catch (err) {
-        console.error('Error verificando sesión:', err);
+        console.error('Error verificando sesión de activación:', err);
+        if (isMounted) {
+          setResolvedEmail('');
+          setErrorMessage('El enlace de activación no es válido o ha caducado. Solicita una nueva invitación.');
+        }
       } finally {
         if (isMounted) setIsVerifyingSession(false);
       }
@@ -58,9 +97,9 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
 
     checkSession();
 
-    // Escuchar si Supabase procesa el hash del invite
+    // Escuchar si Supabase procesa el hash del invite solo cuando no hay token explícito en el hash
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user?.email && isMounted) {
+      if (!window.location.hash.includes('access_token') && session?.user?.email && isMounted) {
         setResolvedEmail(session.user.email);
         setIsVerifyingSession(false);
       }
@@ -70,12 +109,17 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [supabaseUser, activeClient]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (!resolvedEmail) {
+      setErrorMessage('El enlace de activación no es válido o ha caducado. Solicita una nueva invitación.');
+      return;
+    }
 
     if (!password) {
       setErrorMessage('Por favor introduce tu nueva contraseña.');
@@ -111,28 +155,28 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
 
       const userEmail = data.user?.email || resolvedEmail;
 
-      // 2. Actualizar el estado en la tabla clients a 'Activo'.
-      //    Se usa la Edge Function 'activate-client' (service_role) como
-      //    vía principal y fiable, ya que evita cualquier ambigüedad de
-      //    RLS/sesión en el update hecho directamente desde el navegador.
-      let activationConfirmed = false;
+      // 2. Activar cliente vía Edge Function 'activate-client' (vía principal con service_role)
+      let activatedViaEdgeFunction = false;
       try {
-        const { data: activateData, error: activateError } = await supabase.functions.invoke(
-          'activate-client',
-          { body: {} }
-        );
-        if (activateError) {
-          console.warn('Advertencia: activate-client Edge Function falló:', activateError);
-        } else if (activateData?.success) {
-          activationConfirmed = true;
+        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('activate-client', {
+          body: {},
+        });
+
+        if (!edgeError && edgeData?.success) {
+          activatedViaEdgeFunction = true;
+          console.log('Cliente activado con éxito vía Edge Function activate-client:', edgeData);
+          if (edgeData.client?.id) {
+            updateClient(edgeData.client.id, { status: 'Activo' });
+          }
+        } else if (edgeError) {
+          console.warn('Edge Function activate-client reportó advertencia, intentando respaldo directo:', edgeError);
         }
-      } catch (fnErr) {
-        console.warn('Advertencia invocando activate-client:', fnErr);
+      } catch (funcErr) {
+        console.warn('Excepción al invocar activate-client, intentando respaldo directo:', funcErr);
       }
 
-      // Respaldo: si por lo que sea la Edge Function no confirmó el cambio,
-      // se intenta también el update directo (best-effort, no bloqueante).
-      if (!activationConfirmed && userEmail) {
+      // Respaldo best-effort directo en tabla clients si la Edge Function no estuviera disponible
+      if (!activatedViaEdgeFunction && userEmail) {
         try {
           await supabase
             .from('clients')
@@ -143,12 +187,14 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
             })
             .ilike('email', userEmail);
         } catch (dbErr) {
-          console.warn('Advertencia actualizando estado en tabla clients:', dbErr);
+          console.warn('Advertencia actualizando estado en tabla clients (respaldo directo):', dbErr);
         }
-      }
 
-      // Si tenemos un cliente activo en contexto, actualizarlo
-      if (userEmail && activeClient && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
+        // Si tenemos un cliente activo en contexto, actualizarlo
+        if (activeClient && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
+          updateClient(activeClient.id, { status: 'Activo' });
+        }
+      } else if (activeClient && userEmail && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
         updateClient(activeClient.id, { status: 'Activo' });
       }
 
@@ -261,7 +307,7 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isVerifyingSession || !resolvedEmail}
               style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
               className="w-full py-3.5 rounded-full font-bold text-xs shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >

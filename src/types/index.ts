@@ -59,6 +59,7 @@ export interface TrainerProfile {
 
 export interface ClientData {
   id: string;
+  trainerId?: string;
   name: string;
   initials: string;
   avatarUrl?: string;

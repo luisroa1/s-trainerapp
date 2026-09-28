@@ -125,8 +125,8 @@ COMMIT;
 `;
 
 // Helper: Format client for database storage
-export const serializeClientToDb = (client: ClientData) => {
-  return {
+export const serializeClientToDb = (client: ClientData, ownerId?: string) => {
+  const payload: any = {
     id: client.id,
     name: client.name,
     email: client.email,
@@ -141,6 +141,14 @@ export const serializeClientToDb = (client: ClientData) => {
     data: client, // Full structured json
     updated_at: new Date().toISOString()
   };
+
+  // Solo incluir trainer_id si se pasa explícitamente (ej. al crear cliente nuevo),
+  // para no pisar el trainer_id existente en actualizaciones posteriores.
+  if (ownerId) {
+    payload.trainer_id = ownerId;
+  }
+
+  return payload;
 };
 
 export const deserializeClientFromDb = (row: any): ClientData => {
@@ -155,10 +163,14 @@ export const deserializeClientFromDb = (row: any): ClientData => {
       status: row.status || row.data.status,
       currentWeight: Number(row.current_weight || row.data.currentWeight || 70),
       adherencePercentage: Number(row.adherence_percentage || row.data.adherencePercentage || 100),
-      assignedProgramId: row.assigned_program_id || row.data.assignedProgramId || 'prog-1'
+      assignedProgramId: row.assigned_program_id || row.data.assignedProgramId || '',
+      trainerId: row.trainer_id || row.data.trainerId
     };
   }
-  return row.data as ClientData;
+  return {
+    ...(row.data as ClientData),
+    trainerId: row.trainer_id || (row.data as any)?.trainerId
+  };
 };
 
 // Database Read/Write Operations with graceful fallback
@@ -181,9 +193,9 @@ export const supabaseDb = {
     }
   },
 
-  async upsertClient(client: ClientData): Promise<{ error: any }> {
+  async upsertClient(client: ClientData, ownerId?: string): Promise<{ error: any }> {
     try {
-      const payload = serializeClientToDb(client);
+      const payload = serializeClientToDb(client, ownerId);
       const { error } = await supabase
         .from('clients')
         .upsert(payload, { onConflict: 'id' });
@@ -193,9 +205,9 @@ export const supabaseDb = {
     }
   },
 
-  async bulkUpsertClients(clientsList: ClientData[]): Promise<{ error: any }> {
+  async bulkUpsertClients(clientsList: ClientData[], ownerId?: string): Promise<{ error: any }> {
     try {
-      const payloads = clientsList.map(serializeClientToDb);
+      const payloads = clientsList.map(c => serializeClientToDb(c, ownerId));
       const { error } = await supabase
         .from('clients')
         .upsert(payloads, { onConflict: 'id' });
@@ -222,38 +234,50 @@ export const supabaseDb = {
     }
   },
 
-  async upsertProgram(program: Program): Promise<{ error: any }> {
+  async upsertProgram(program: Program, ownerId?: string): Promise<{ error: any }> {
     try {
+      const payload: any = {
+        id: program.id,
+        name: program.name,
+        type: program.type,
+        level: program.level,
+        duration_weeks: program.durationWeeks,
+        days_per_week: program.daysPerWeek,
+        data: program,
+        updated_at: new Date().toISOString()
+      };
+      // Solo incluir trainer_id si se pasa explícitamente (al crear nuevo programa)
+      if (ownerId) {
+        payload.trainer_id = ownerId;
+      }
+
       const { error } = await supabase
         .from('programs')
-        .upsert({
-          id: program.id,
-          name: program.name,
-          type: program.type,
-          level: program.level,
-          duration_weeks: program.durationWeeks,
-          days_per_week: program.daysPerWeek,
-          data: program,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+        .upsert(payload, { onConflict: 'id' });
       return { error };
     } catch (err) {
       return { error: err };
     }
   },
 
-  async bulkUpsertPrograms(programsList: Program[]): Promise<{ error: any }> {
+  async bulkUpsertPrograms(programsList: Program[], ownerId?: string): Promise<{ error: any }> {
     try {
-      const payloads = programsList.map(p => ({
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        level: p.level,
-        duration_weeks: p.durationWeeks,
-        days_per_week: p.daysPerWeek,
-        data: p,
-        updated_at: new Date().toISOString()
-      }));
+      const payloads = programsList.map(p => {
+        const payload: any = {
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          level: p.level,
+          duration_weeks: p.durationWeeks,
+          days_per_week: p.daysPerWeek,
+          data: p,
+          updated_at: new Date().toISOString()
+        };
+        if (ownerId) {
+          payload.trainer_id = ownerId;
+        }
+        return payload;
+      });
       const { error } = await supabase
         .from('programs')
         .upsert(payloads, { onConflict: 'id' });
@@ -285,16 +309,22 @@ export const supabaseDb = {
     }
   },
 
-  async upsertNutritionPlan(clientId: string, plan: NutritionPlan): Promise<{ error: any }> {
+  async upsertNutritionPlan(clientId: string, plan: NutritionPlan, ownerId?: string): Promise<{ error: any }> {
     try {
+      const payload: any = {
+        id: plan.id || `nut-${clientId}`,
+        client_id: clientId,
+        data: plan,
+        updated_at: new Date().toISOString()
+      };
+      // Solo incluir trainer_id si se pasa explícitamente (al crear nuevo plan)
+      if (ownerId) {
+        payload.trainer_id = ownerId;
+      }
+
       const { error } = await supabase
         .from('nutrition_plans')
-        .upsert({
-          id: plan.id || `nut-${clientId}`,
-          client_id: clientId,
-          data: plan,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+        .upsert(payload, { onConflict: 'id' });
       return { error };
     } catch (err) {
       return { error: err };
@@ -302,13 +332,15 @@ export const supabaseDb = {
   },
 
   // Trainer Profile
-  async getTrainerProfile(): Promise<{ data: TrainerProfile | null; error: any }> {
+  async getTrainerProfile(supabaseUserId?: string): Promise<{ data: TrainerProfile | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('trainer_profiles')
-        .select('*')
-        .limit(1)
-        .maybeSingle();
+      let query = supabase.from('trainer_profiles').select('*');
+      if (supabaseUserId) {
+        query = query.eq('id', supabaseUserId);
+      } else {
+        query = query.limit(1);
+      }
+      const { data, error } = await query.maybeSingle();
 
       if (error) return { data: null, error };
       if (!data) return { data: null, error: null };
@@ -330,10 +362,15 @@ export const supabaseDb = {
 
   async upsertTrainerProfile(trainer: TrainerProfile): Promise<{ error: any }> {
     try {
+      const trainerId = trainer.id;
+      if (!trainerId) {
+        return { error: new Error('No se puede actualizar el perfil del entrenador sin un ID válido') };
+      }
+
       const { error } = await supabase
         .from('trainer_profiles')
         .upsert({
-          id: trainer.id || 'trn-1',
+          id: trainerId,
           name: trainer.name,
           email: trainer.email,
           initials: trainer.initials,

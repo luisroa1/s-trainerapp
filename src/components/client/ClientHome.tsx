@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Check, User, MessageSquare, Moon, Sparkles } from 'lucide-react';
 import { ClientMotivationalModal, MotivationType } from './ClientMotivationalModal';
@@ -6,16 +6,134 @@ import { ClientMotivationalModal, MotivationType } from './ClientMotivationalMod
 interface ClientHomeProps {
   onStartWorkout: () => void;
   onNavigateTab: (tab: 'hoy' | 'entreno' | 'progreso' | 'nutricion' | 'perfil') => void;
+  hasActiveSession?: boolean;
 }
 
-export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNavigateTab }) => {
-  const { activeClient, appName } = useApp();
+export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNavigateTab, hasActiveSession = false }) => {
+  const { activeClient, appName, programs } = useApp();
   const [activeModal, setActiveModal] = useState<MotivationType | null>(null);
 
-  const firstName = activeClient.name.split(' ')[0] || 'Jesús';
+  const firstName = activeClient?.name ? (activeClient.name.split(' ')[0] || 'Jesús') : 'Jesús';
 
-  const completedCount = activeClient.weeklySchedule.filter(s => s.status === 'completed').length;
-  const targetCount = activeClient.weeklySchedule.filter(s => s.status !== 'rest').length;
+  const weeklySchedule = activeClient?.weeklySchedule || [];
+  const completedCount = weeklySchedule.filter(s => s.status === 'completed').length;
+  const targetCount = weeklySchedule.filter(s => s.status !== 'rest').length;
+
+  // Localizar el programa asignado al cliente
+  const assignedProgram = programs.find(
+    p => p.id === activeClient?.assignedProgramId
+  );
+
+  // Determinar día de la semana actual (D, L, M, X, J, V, S)
+  const DAY_CODES: Array<'D' | 'L' | 'M' | 'X' | 'J' | 'V' | 'S'> = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+  const currentDayCode = DAY_CODES[new Date().getDay()];
+
+  // Buscar el día actual en el calendario semanal del cliente
+  const todaySchedule = weeklySchedule.find(s => s.day === currentDayCode);
+  const isRestDay = todaySchedule ? todaySchedule.status === 'rest' : false;
+
+  // Determinar sesión del programa asignado
+  const workoutDaysInSchedule = weeklySchedule.filter(s => s.status !== 'rest');
+  const currentDayIndexInWorkouts = workoutDaysInSchedule.findIndex(s => s.day === currentDayCode);
+
+  let currentWorkoutDayIndex = 0;
+  if (currentDayIndexInWorkouts >= 0) {
+    currentWorkoutDayIndex = currentDayIndexInWorkouts;
+  } else {
+    // Si hoy no está marcado o es descanso, buscar el primer día pendiente
+    const pendingIndex = workoutDaysInSchedule.findIndex(s => s.status === 'pending');
+    if (pendingIndex >= 0) {
+      currentWorkoutDayIndex = pendingIndex;
+    }
+  }
+
+  const currentDay = assignedProgram?.days?.[
+    currentWorkoutDayIndex % (assignedProgram.days.length || 1)
+  ] || assignedProgram?.days?.[0];
+
+  // Cálculo de duración estimada real a partir de los ejercicios del currentDay
+  const estimatedDurationText = useMemo(() => {
+    const exercises = currentDay?.exercises || [];
+    if (exercises.length === 0) return '30–40 min';
+
+    // Estimación:
+    // - Cada serie de trabajo: ~45 segundos
+    // - Descanso entre series: restSeconds (o 90s por defecto si no está especificado) para cada serie excepto la última serie de cada ejercicio
+    // - Transición entre ejercicios: ~90 segundos entre ejercicios distintos
+    const WORK_SECONDS_PER_SET = 45;
+    const DEFAULT_REST_SECONDS = 90;
+
+    let totalSeconds = 0;
+    exercises.forEach((ex, idx) => {
+      const sets = Math.max(1, ex.sets || 3);
+      const rest = ex.restSeconds > 0 ? ex.restSeconds : DEFAULT_REST_SECONDS;
+
+      // Tiempo de trabajo de todas las series del ejercicio
+      totalSeconds += sets * WORK_SECONDS_PER_SET;
+
+      // Tiempo de descanso entre series del ejercicio (sets - 1 descansos)
+      totalSeconds += Math.max(0, sets - 1) * rest;
+
+      // Tiempo de transición al siguiente ejercicio (si no es el último)
+      if (idx < exercises.length - 1) {
+        totalSeconds += Math.max(rest, 90);
+      }
+    });
+
+    const totalMinutes = Math.round(totalSeconds / 60);
+    const minRange = Math.max(15, totalMinutes - 3);
+    const maxRange = totalMinutes + 3;
+
+    return `${minRange}–${maxRange} min`;
+  }, [currentDay]);
+
+  // Determinar mensaje del entrenador:
+  // a) trainerTip de un ejercicio del currentDay
+  const firstExerciseTip = currentDay?.exercises?.find(e => e.trainerTip)?.trainerTip;
+  const cleanExerciseTip = firstExerciseTip ? firstExerciseTip.replace(/^Tu entrenador:\s*/i, '').trim() : null;
+
+  // b) trainerNote explícitamente relacionada con entrenamiento (excluyendo notas administrativas como "Invitación enviada por email")
+  const trainingRelatedNote = useMemo(() => {
+    if (!activeClient?.trainerNotes || activeClient.trainerNotes.length === 0) return null;
+    const administrativeKeywords = [
+      'invitacion',
+      'invitación',
+      'email',
+      'correo',
+      'activar',
+      'activación',
+      'cuenta creada',
+      'registro',
+      'bienvenida',
+      'alta',
+      'enviada',
+      'enviado'
+    ];
+
+    const validNote = activeClient.trainerNotes.find(note => {
+      if (!note.content) return false;
+      const lower = note.content.toLowerCase();
+      const isAdministrative = administrativeKeywords.some(kw => lower.includes(kw));
+      return !isAdministrative && lower.length > 5;
+    });
+
+    return validNote ? validNote.content.trim() : null;
+  }, [activeClient?.trainerNotes]);
+
+  // c) Mensaje técnico genérico apropiado
+  const defaultMessage = isRestDay
+    ? 'El descanso y la recuperación son fundamentales para asimilar el entrenamiento.'
+    : 'Mantén una buena técnica y control en cada repetición.';
+
+  const trainerMessage = cleanExerciseTip || trainingRelatedNote || defaultMessage;
+
+  // Formato de fecha actual localizada
+  const formattedToday = new Date().toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short'
+  });
+  const capitalizedDate = formattedToday.charAt(0).toUpperCase() + formattedToday.slice(1);
 
   return (
     <div className="flex flex-col min-h-full pb-20 px-5 pt-4 bg-[#101012] text-[#F5F4F0]">
@@ -57,7 +175,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
       {/* Greeting */}
       <div className="mb-5">
         <span className="text-xs text-[#8E8E94] font-medium block">
-          Jueves, 24 sept
+          {capitalizedDate}
         </span>
         <h2 className="text-2xl font-extrabold font-display text-[#F5F4F0] tracking-tight">
           Hola, {firstName}
@@ -120,11 +238,12 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
 
         {/* Days Circle Matrix */}
         <div className="flex items-center justify-between px-1">
-          {activeClient.weeklySchedule.map((dayItem, index) => {
+          {weeklySchedule.map((dayItem, index) => {
             const isCompleted = dayItem.status === 'completed';
             const isPendingToday = dayItem.status === 'pending';
             const isProtected = dayItem.status === 'protected_streak';
             const isRest = dayItem.status === 'rest';
+            const isTrainingDay = dayItem.status !== 'rest';
 
             return (
               <div key={index} className="flex flex-col items-center gap-1.5">
@@ -142,8 +261,8 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 )}
 
                 {isPendingToday && (
-                  <div className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-[#FF6B4A] flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#FF6B4A] animate-pulse" />
+                  <div className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-[#CC7566] flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#CC7566] animate-pulse" />
                   </div>
                 )}
 
@@ -158,9 +277,12 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 )}
 
                 {isRest && (
-                  <div className="w-9 h-9 rounded-full bg-[#16161A] border border-[#2A2A2F] flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-emerald-500 flex items-center justify-center">
                     <span className="text-sm font-bold text-[#3A3A40]">—</span>
                   </div>
+                )}
+                {isTrainingDay && !isCompleted && !isPendingToday && !isProtected && (
+                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-red-500 flex items-center justify-center" />
                 )}
               </div>
             );
@@ -177,30 +299,80 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
         <span className="text-[9.5px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
           ENTRENAMIENTO DE HOY
         </span>
-        <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
-          Pierna
-        </h3>
-        <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
-          45–55 min · 7 ejercicios
-        </p>
 
-        {/* Coach tip note */}
-        <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
-          <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
-          <p className="text-xs text-[#8E8E94] leading-relaxed">
-            <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> hoy vamos a por más repeticiones que la semana pasada.
-          </p>
-        </div>
+        {!activeClient?.assignedProgramId ? (
+          <div>
+            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+              Sin programa asignado
+            </h3>
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+              Contacta con tu entrenador para que te asigne una rutina personalizada
+            </p>
+            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
+              <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#8E8E94] leading-relaxed">
+                <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> pronto tendrás tu plan de entrenamiento asignado.
+              </p>
+            </div>
+          </div>
+        ) : !assignedProgram ? (
+          <div>
+            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+              Programa no disponible
+            </h3>
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+              Programa asignado: {activeClient.assignedProgramId}
+            </p>
+            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
+              <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#8E8E94] leading-relaxed">
+                <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> estamos preparando tu programa para que puedas comenzar.
+              </p>
+            </div>
+          </div>
+        ) : isRestDay ? (
+          <div>
+            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+              Día de descanso
+            </h3>
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+              Recuperación activa · Recarga energías para la próxima sesión
+            </p>
+            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
+              <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#8E8E94] leading-relaxed">
+                <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+              {currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}
+            </h3>
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+              {`${estimatedDurationText} · ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'}`}
+            </p>
 
-        {/* Action Button */}
-        <button
-          onClick={onStartWorkout}
-          style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-          className="w-full py-3.5 rounded-full font-extrabold text-sm shadow-md transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
-        >
-          <Sparkles className="w-4 h-4 fill-current" />
-          Empezar entrenamiento
-        </button>
+            {/* Coach tip note */}
+            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
+              <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#8E8E94] leading-relaxed">
+                <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
+              </p>
+            </div>
+
+            {/* Action Button */}
+            <button
+              onClick={onStartWorkout}
+              style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+              className="w-full py-3.5 rounded-full font-extrabold text-sm shadow-md transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-4 h-4 fill-current" />
+              {hasActiveSession ? 'Continuar entrenamiento' : 'Empezar entrenamiento'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2x2 Metric Grid with exact color coding */}

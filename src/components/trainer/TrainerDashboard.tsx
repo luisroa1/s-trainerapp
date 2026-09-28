@@ -63,6 +63,31 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
 
       {/* Table */}
       <div className="rounded-[16px] bg-[#16161A] border border-[#2A2A2F] overflow-hidden shadow-xl">
+        {filteredClients.length === 0 ? (
+          <div className="py-16 px-6 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center mx-auto mb-4 text-[#8E8E94]">
+              <Search className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-[#F5F4F0] mb-1">
+              {search ? 'No se encontraron clientes' : 'Aún no tienes clientes'}
+            </h3>
+            <p className="text-xs text-[#8E8E94] max-w-sm mx-auto mb-5">
+              {search 
+                ? 'Prueba con otro término de búsqueda o limpia el filtro.' 
+                : 'Invita a tu primer cliente para asignarle programas y dar seguimiento a su progreso.'}
+            </p>
+            {!search && (
+              <button
+                onClick={onOpenInvite}
+                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Invitar primer cliente</span>
+              </button>
+            )}
+          </div>
+        ) : (
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-[#2A2A2F] text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider">
@@ -198,6 +223,7 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
             })}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );

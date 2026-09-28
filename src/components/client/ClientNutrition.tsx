@@ -14,10 +14,10 @@ export const ClientNutrition: React.FC<ClientNutritionProps> = ({
   onOpenCalculator
 }) => {
   const { activeClient, nutritionPlans, toggleMealCompleted } = useApp();
-  const currentPlan = nutritionPlans[activeClient.id] || nutritionPlans['cli-juan'];
+  const currentPlan = activeClient ? nutritionPlans[activeClient.id] : undefined;
 
-  const consumedKcal = activeClient.metrics.kcalToday;
-  const targetKcal = activeClient.metrics.kcalGoal;
+  const consumedKcal = activeClient?.metrics?.kcalToday || 0;
+  const targetKcal = currentPlan?.targetKcal || activeClient?.metrics?.kcalGoal || 2000;
   const remainingKcal = Math.max(0, targetKcal - consumedKcal);
 
   // Circular SVG ring calculation
@@ -169,11 +169,18 @@ export const ClientNutrition: React.FC<ClientNutritionProps> = ({
         <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-2.5">
           CUMPLIMIENTO DE HOY
         </span>
+        {(!currentPlan || !currentPlan.meals || currentPlan.meals.length === 0) ? (
+          <div className="p-6 rounded-[14px] bg-[#16161A] border border-[#2A2A2F] text-center">
+            <p className="text-xs text-[#8E8E94]">
+              Tu entrenador aún no ha configurado las comidas de tu plan nutricional.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-2">
-          {currentPlan?.meals.map((meal) => (
+          {currentPlan.meals.map((meal) => (
             <div
               key={meal.id}
-              onClick={() => toggleMealCompleted(activeClient.id, meal.id)}
+              onClick={() => activeClient && toggleMealCompleted(activeClient.id, meal.id)}
               className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
             >
               <div>
@@ -195,6 +202,7 @@ export const ClientNutrition: React.FC<ClientNutritionProps> = ({
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

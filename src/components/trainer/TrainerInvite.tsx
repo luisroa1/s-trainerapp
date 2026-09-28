@@ -14,7 +14,7 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
   const [email, setEmail] = useState('');
   const [objective, setObjective] = useState('Pérdida de grasa');
   const [startDate, setStartDate] = useState('2026-10-01');
-  const [assignedProgram, setAssignedProgram] = useState(programs[0]?.id || 'prog-1');
+  const [assignedProgram, setAssignedProgram] = useState(programs[0]?.id || '');
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

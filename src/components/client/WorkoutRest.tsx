@@ -4,16 +4,26 @@ import { ArrowLeft, Check, Plus } from 'lucide-react';
 interface WorkoutRestProps {
   onBack: () => void;
   onFinishRest: () => void;
-  recordedInfo?: { setNum: number; weight: number; reps: number };
+  recordedInfo?: {
+    setNum: number;
+    weight: number;
+    reps: number;
+    targetSets?: number;
+    targetWeight?: number;
+    targetReps?: number;
+    targetRir?: number;
+  };
 }
 
 export const WorkoutRest: React.FC<WorkoutRestProps> = ({
   onBack,
   onFinishRest,
-  recordedInfo = { setNum: 2, weight: 82.5, reps: 7 }
+  recordedInfo = { setNum: 1, weight: 0, reps: 0, targetSets: 1, targetWeight: 0, targetReps: 0, targetRir: 0 }
 }) => {
-  const totalSecondsInitial = 120; // 2:00 min
-  const [secondsRemaining, setSecondsRemaining] = useState(90); // starts at 1:30 for demo fidelity
+  const targetSets = recordedInfo.targetSets ?? recordedInfo.setNum;
+  const nextSetNum = Math.min(targetSets, recordedInfo.setNum + 1);
+  const totalSecondsInitial = 90; // 1:30 min (descanso por defecto entre series)
+  const [secondsRemaining, setSecondsRemaining] = useState(totalSecondsInitial);
   const [totalSeconds, setTotalSeconds] = useState(totalSecondsInitial);
   const [isActive, setIsActive] = useState(true);
 
@@ -148,10 +158,10 @@ export const WorkoutRest: React.FC<WorkoutRestProps> = ({
         </span>
         <div className="flex items-center justify-between">
           <h4 className="text-base font-bold text-[#F5F4F0]">
-            Serie {Math.min(4, recordedInfo.setNum + 1)} de 4
+            Serie {nextSetNum} de {targetSets}
           </h4>
           <span className="text-xs font-semibold text-[#8E8E94]">
-            80 kg · 8 reps · RIR 2
+            {(recordedInfo.targetWeight ?? 0).toString().replace('.', ',')} kg · {recordedInfo.targetReps ?? 0} reps · RIR {recordedInfo.targetRir ?? 0}
           </span>
         </div>
       </div>

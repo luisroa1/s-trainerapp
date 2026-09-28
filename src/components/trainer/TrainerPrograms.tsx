@@ -40,6 +40,27 @@ export const TrainerPrograms: React.FC<TrainerProgramsProps> = ({
       </div>
 
       {/* Grid 2 Columns */}
+      {programs.length === 0 ? (
+        <div className="rounded-[16px] bg-[#16161A] border border-[#2A2A2F] py-16 px-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center mx-auto mb-4 text-[#8E8E94]">
+            <Plus className="w-5 h-5" />
+          </div>
+          <h3 className="text-base font-bold text-[#F5F4F0] mb-1">
+            Aún no tienes programas creados
+          </h3>
+          <p className="text-xs text-[#8E8E94] max-w-sm mx-auto mb-5">
+            Crea tu primer programa de entrenamiento personalizado para asignarlo a tus clientes.
+          </p>
+          <button
+            onClick={onCreateNewProgram}
+            style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Crear primer programa</span>
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-4">
         {programs.map((program) => (
           <div
@@ -75,6 +96,7 @@ export const TrainerPrograms: React.FC<TrainerProgramsProps> = ({
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 };

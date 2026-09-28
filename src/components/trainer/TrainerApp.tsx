@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Users, 
   Dumbbell, 
@@ -7,9 +7,8 @@ import {
   Download, 
   MessageSquare, 
   Sparkles, 
-  HelpCircle,
-  LogOut,
-  Loader2
+  HelpCircle, 
+  LogOut 
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ClientData, Program } from '../../types';
@@ -25,7 +24,6 @@ import { TrainerInvite } from './TrainerInvite';
 import { TrainerExport } from './TrainerExport';
 import { TrainerAssistant } from './TrainerAssistant';
 import { TrainerGuide } from './TrainerGuide';
-import { TrainerLogin } from './TrainerLogin';
 
 type TrainerNavSection =
   | 'dashboard'
@@ -49,21 +47,18 @@ export const TrainerApp: React.FC = () => {
     updateTrainer, 
     supabaseUser, 
     userRole, 
+    isAdmin,
     signOut, 
     supabaseStatus,
     isRealtimeActive,
     syncAllToSupabase
   } = useApp();
 
-  // Authentication State
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isAuthenticatedTrainer, setIsAuthenticatedTrainer] = useState(false);
-  const [authDeniedMessage, setAuthDeniedMessage] = useState<string | null>(null);
-
+  // Navigation & Data State
   const [activeSection, setActiveSection] = useState<TrainerNavSection>('dashboard');
-  const [selectedClient, setSelectedClient] = useState<ClientData>(clients[0]);
-  const [selectedProgram, setSelectedProgram] = useState<Program>(programs[0]);
-  const [nutritionClientId, setNutritionClientId] = useState<string>(clients[0]?.id || 'cli-juan');
+  const [selectedClient, setSelectedClient] = useState<ClientData | null>(null);
+  const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
+  const [nutritionClientId, setNutritionClientId] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
 
   // Trainer profile editing state
@@ -73,102 +68,8 @@ export const TrainerApp: React.FC = () => {
   const [trainerAvatar, setTrainerAvatar] = useState(trainer.avatarUrl || '');
   const trainerFileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Verify Supabase session and role = 'trainer'
-  useEffect(() => {
-    let isMounted = true;
-
-    const verifyTrainer = async (userId: string, userEmail?: string) => {
-      try {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('id, role, full_name, email, avatar_url')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (error || !profile || profile.role !== 'trainer') {
-          // If not trainer, sign out and show access denied
-          await supabase.auth.signOut();
-          if (isMounted) {
-            setIsAuthenticatedTrainer(false);
-            setAuthDeniedMessage('Acceso denegado: Esta cuenta no tiene permisos de entrenador.');
-            setIsCheckingAuth(false);
-          }
-          return false;
-        }
-
-        if (isMounted) {
-          const fullName = profile.full_name || userEmail?.split('@')[0] || 'Entrenador';
-          const initials = fullName
-            .split(' ')
-            .filter(Boolean)
-            .map((w: string) => w[0])
-            .slice(0, 2)
-            .join('')
-            .toUpperCase() || 'TR';
-
-          updateTrainer({
-            id: profile.id,
-            name: fullName,
-            email: profile.email || userEmail || '',
-            initials,
-            role: 'Entrenador',
-            avatarUrl: profile.avatar_url || '',
-          });
-          setTrainerName(fullName);
-          setTrainerRole('Entrenador');
-          setTrainerAvatar(profile.avatar_url || '');
-
-          setIsAuthenticatedTrainer(true);
-          setAuthDeniedMessage(null);
-          setIsCheckingAuth(false);
-        }
-        return true;
-      } catch {
-        if (isMounted) {
-          setIsAuthenticatedTrainer(false);
-          setIsCheckingAuth(false);
-        }
-        return false;
-      }
-    };
-
-    // 1. Initial check
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      if (!isMounted) return;
-      if (error || !session?.user) {
-        setIsAuthenticatedTrainer(false);
-        setIsCheckingAuth(false);
-        return;
-      }
-      await verifyTrainer(session.user.id, session.user.email);
-    });
-
-    // 2. Auth State Change Listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      if (event === 'SIGNED_OUT' || !session?.user) {
-        setIsAuthenticatedTrainer(false);
-        setIsCheckingAuth(false);
-        return;
-      }
-
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        await verifyTrainer(session.user.id, session.user.email);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
   const handleLogout = async () => {
     await signOut();
-    await supabase.auth.signOut();
-    setIsAuthenticatedTrainer(false);
-    setAuthDeniedMessage(null);
   };
 
   const handleManualSync = async () => {
@@ -215,7 +116,7 @@ export const TrainerApp: React.FC = () => {
   };
 
   const handleEditProgram = (programId: string) => {
-    const prog = programs.find(p => p.id === programId) || programs[0];
+    const prog = programs.find(p => p.id === programId) || null;
     setSelectedProgram(prog);
     setActiveSection('program_builder');
   };
@@ -224,41 +125,6 @@ export const TrainerApp: React.FC = () => {
     setNutritionClientId(clientId);
     setActiveSection('nutrition_builder');
   };
-
-  // Brief loading state while verifying session
-  if (isCheckingAuth) {
-    return (
-      <div className="w-full min-h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center bg-[#101012] text-[#F5F4F0]">
-        <div 
-          className="w-12 h-12 rounded-2xl flex items-center justify-center p-2.5 shadow-lg mb-4 animate-pulse"
-          style={{ backgroundColor: 'var(--accent-color, #CFFF5C)' }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="#101012" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
-            <path d="M4 17 L10 11 L14 15 L20 7" />
-            <path d="M14 7 H20 V13" />
-          </svg>
-        </div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-[#8E8E94]">
-          <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-color,#CFFF5C)]" />
-          <span>Verificando acceso de entrenador...</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Not authenticated as trainer -> Show TrainerLogin
-  if (!isAuthenticatedTrainer) {
-    return (
-      <TrainerLogin
-        initialError={authDeniedMessage}
-        onLoginSuccess={() => {
-          setIsAuthenticatedTrainer(true);
-          setAuthDeniedMessage(null);
-          setIsCheckingAuth(false);
-        }}
-      />
-    );
-  }
 
   return (
     <div className="flex w-full min-h-screen bg-[#101012] text-[#F5F4F0]">
@@ -358,8 +224,12 @@ export const TrainerApp: React.FC = () => {
 
             <button
               onClick={() => {
-                setSelectedClient(clients[0]);
-                setActiveSection('client_detail');
+                if (clients.length > 0) {
+                  setSelectedClient(clients[0]);
+                  setActiveSection('client_detail');
+                } else {
+                  setActiveSection('dashboard');
+                }
               }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40 transition-colors"
             >
@@ -420,9 +290,16 @@ export const TrainerApp: React.FC = () => {
                 )}
               </div>
               <div className="overflow-hidden">
-                <span className="font-bold text-xs text-[#F5F4F0] block leading-tight group-hover:text-[var(--accent-color,#CFFF5C)] transition-colors truncate">
-                  {trainer.name || 'Entrenador'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-xs text-[#F5F4F0] block leading-tight group-hover:text-[var(--accent-color,#CFFF5C)] transition-colors truncate">
+                    {trainer.name || 'Entrenador'}
+                  </span>
+                  {isAdmin && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-[#FFD34D]/20 text-[#FFD34D] border border-[#FFD34D]/40 text-[8px] font-extrabold uppercase tracking-wider shrink-0">
+                      Admin
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px] text-[#8E8E94] truncate block">
                   {trainer.email || 'entrenador'}
                 </span>
@@ -580,6 +457,40 @@ export const TrainerApp: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 min-w-0 overflow-y-auto">
+        {/* Header Bar with Trainer Name/Avatar and Admin Badge */}
+        <header className="h-14 border-b border-[#2A2A2F] bg-[#16161A]/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-20">
+          <div className="flex items-center gap-3">
+            <div className="relative shrink-0">
+              {trainer.avatarUrl ? (
+                <img
+                  src={trainer.avatarUrl}
+                  alt={trainer.name}
+                  className="w-8 h-8 rounded-full object-cover border border-[#2A2A2F]"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-bold text-xs text-[#F5F4F0]">
+                  {trainer.initials || 'TR'}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="font-bold text-xs text-[#F5F4F0]">
+                {trainer.name || 'Entrenador'}
+              </span>
+              {isAdmin && (
+                <span className="px-2.5 py-0.5 rounded-full bg-[#FFD34D]/20 text-[#FFD34D] border border-[#FFD34D]/40 text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#FFD34D] animate-pulse" />
+                  <span>Modo Administrador</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-[#8E8E94]">
+            <span className="font-mono text-[11px] hidden sm:inline">{trainer.email}</span>
+          </div>
+        </header>
+
         {activeSection === 'dashboard' && (
           <TrainerDashboard
             onSelectClient={handleSelectClient}
@@ -588,12 +499,24 @@ export const TrainerApp: React.FC = () => {
         )}
 
         {activeSection === 'client_detail' && (
-          <TrainerClientDetail
-            client={selectedClient}
-            onBack={() => setActiveSection('dashboard')}
-            onEditProgram={handleEditProgram}
-            onEditNutrition={handleEditNutrition}
-          />
+          selectedClient ? (
+            <TrainerClientDetail
+              client={selectedClient}
+              onBack={() => setActiveSection('dashboard')}
+              onEditProgram={handleEditProgram}
+              onEditNutrition={handleEditNutrition}
+            />
+          ) : (
+            <div className="p-8 max-w-[1240px] mx-auto text-center py-20">
+              <p className="text-sm text-[#8E8E94]">Ningún cliente seleccionado.</p>
+              <button
+                onClick={() => setActiveSection('dashboard')}
+                className="mt-4 px-4 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] cursor-pointer"
+              >
+                Volver a la lista de clientes
+              </button>
+            </div>
+          )
         )}
 
         {activeSection === 'programs' && (
@@ -637,11 +560,23 @@ export const TrainerApp: React.FC = () => {
         )}
 
         {activeSection === 'program_builder' && (
-          <TrainerProgramBuilder
-            program={selectedProgram}
-            onBack={() => setActiveSection('programs')}
-            onSave={() => setActiveSection('programs')}
-          />
+          selectedProgram ? (
+            <TrainerProgramBuilder
+              program={selectedProgram}
+              onBack={() => setActiveSection('programs')}
+              onSave={() => setActiveSection('programs')}
+            />
+          ) : (
+            <div className="p-8 max-w-[1240px] mx-auto text-center py-20">
+              <p className="text-sm text-[#8E8E94]">Ningún programa seleccionado para editar.</p>
+              <button
+                onClick={() => setActiveSection('programs')}
+                className="mt-4 px-4 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] cursor-pointer"
+              >
+                Volver a la lista de programas
+              </button>
+            </div>
+          )
         )}
 
         {activeSection === 'nutrition_new' && (

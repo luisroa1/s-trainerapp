@@ -365,14 +365,11 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
               </p>
             </div>
-            <button
-              onClick={onStartWorkout}
-              style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-              className="w-full py-3.5 rounded-full font-extrabold text-sm shadow-md transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-4 h-4 fill-current" />
-              {hasActiveSession ? 'Continuar entrenamiento' : 'Empezar entrenamiento'}
-            </button>
+            <div className="w-full py-3.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center">
+              <span className="text-sm font-extrabold text-emerald-500">
+                Lo has hecho hoy. Mañana por más.
+              </span>
+            </div>
           </div>
         ) : (
           <div>

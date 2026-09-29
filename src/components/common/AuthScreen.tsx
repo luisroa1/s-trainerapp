@@ -73,14 +73,15 @@ export const AuthScreen: React.FC = () => {
       {/* Veladura oscura para legibilidad del texto sobre la foto */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#05090B]/85 via-[#05090B]/55 to-[#05090B]/92" />
 
-      <div className="relative flex min-h-screen w-full flex-col items-center px-6 pb-8 pt-14">
+      <div className="relative flex min-h-screen w-full flex-col items-center px-6 pb-16 pt-14">
+        <div className="flex-[1]" />
         {/* Marca */}
         <BrandMark className="w-16 h-16 drop-shadow-[0_0_18px_rgba(34,180,232,0.55)]" />
         <div className="mt-2 text-xl font-extrabold font-display tracking-[0.2em]">
           {appName?.toUpperCase() || 'S-TRAINER'}
         </div>
 
-        <div className="flex-1" />
+        <div className="flex-[2]" />
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-3.5">

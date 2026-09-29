@@ -253,37 +253,37 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 </span>
 
                 {isCompleted && (
-                  <div 
-                    className="w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-transform hover:scale-105"
-                    style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+                  <div
+                    className="w-9 h-9 rounded-full bg-cyan-400 text-[#05090B] flex items-center justify-center shadow-md transition-transform hover:scale-105"
                   >
                     <Check className="w-5 h-5 stroke-[3]" />
                   </div>
                 )}
 
                 {isPendingToday && (
-                  <div className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-[#CC7566] flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#CC7566] animate-pulse" />
+                  <div className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-red-500 flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                   </div>
                 )}
 
                 {isProtected && (
-                  <div 
+                  <div
                     onClick={() => setActiveModal('racha_protegida')}
-                    className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-amber-400 flex items-center justify-center cursor-pointer"
+                    className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-cyan-400 flex items-center justify-center cursor-pointer"
                     title="Racha protegida"
                   >
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
                   </div>
                 )}
 
                 {isRest && (
-                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-emerald-500 flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-[#2A2A2F] flex items-center justify-center">
                     <span className="text-sm font-bold text-[#3A3A40]">—</span>
                   </div>
                 )}
                 {isTrainingDay && !isCompleted && !isPendingToday && !isProtected && (
-                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-red-500 flex items-center justify-center" />
+                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-[#2A2A2F] flex items-center justify-center" />
+                )}
                 )}
               </div>
             );
@@ -349,10 +349,10 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
         ) : isTodayCompleted ? (
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                <Check className="w-3.5 h-3.5 text-[#101012] stroke-[3]" />
+              <div className="w-6 h-6 rounded-full bg-cyan-400 flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 text-[#05090B] stroke-[3]" />
               </div>
-              <h3 className="text-2xl font-extrabold font-display text-emerald-500 leading-tight">
+              <h3 className="text-2xl font-extrabold font-display text-cyan-400 leading-tight">
                 Entrenamiento completado
               </h3>
             </div>
@@ -365,8 +365,8 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
               </p>
             </div>
-            <div className="w-full py-3.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center">
-              <span className="text-sm font-extrabold text-emerald-500">
+            <div className="w-full py-3.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 flex items-center justify-center">
+              <span className="text-sm font-extrabold text-cyan-400">
                 Lo has hecho hoy. Mañana por más.
               </span>
             </div>

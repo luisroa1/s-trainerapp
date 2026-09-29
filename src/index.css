@@ -35,6 +35,32 @@
   font-family: 'Manrope', sans-serif;
 }
 
+/* Utilidades de "acento encendido" (glow) reutilizando los tokens de color
+   existentes — ningún color nuevo, solo halos/sombras para el lenguaje
+   visual premium de las 4 referencias. Uso: CTAs y estados destacados. */
+.glow-accent {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color, #CFFF5C) 45%, transparent),
+              0 0 24px 0 color-mix(in srgb, var(--accent-color, #CFFF5C) 35%, transparent);
+}
+.glow-cyan {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.4),
+              0 0 24px 0 rgba(34, 211, 238, 0.28);
+}
+.glow-red {
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.4),
+              0 0 24px 0 rgba(239, 68, 68, 0.28);
+}
+
+/* Fondo abstracto oscuro para el hero de "Entrenamiento de hoy" cuando no
+   hay un asset fotográfico: veladura radial sutil sobre el grafito base,
+   sin gradientes multicolor ni degradados llamativos. */
+.hero-abstract-bg {
+  background:
+    radial-gradient(120% 90% at 15% 0%, rgba(255, 255, 255, 0.05) 0%, transparent 55%),
+    radial-gradient(140% 100% at 100% 100%, color-mix(in srgb, var(--accent-color, #CFFF5C) 10%, transparent) 0%, transparent 60%),
+    #0B0B0D;
+}
+
 /* Custom scrollbar for dark aesthetic */
 ::-webkit-scrollbar {
   width: 6px;

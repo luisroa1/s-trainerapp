@@ -67,7 +67,7 @@ export const ClientProgress: React.FC<ClientProgressProps> = ({
       {/* Card Adherencia */}
       <div className="p-4 rounded-[16px] bg-[#1B1B1F] border border-[#2A2A2F] mb-4 flex items-center gap-4">
         {/* Circular Progress 89% */}
-        <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+        <div className="glow-accent relative w-20 h-20 flex items-center justify-center shrink-0 rounded-full">
           <svg className="w-20 h-20 transform -rotate-90">
             <circle cx="40" cy="40" r="32" stroke="#232328" strokeWidth="6" fill="none" />
             <circle

@@ -85,7 +85,7 @@ export const WorkoutRest: React.FC<WorkoutRestProps> = ({
 
         {/* Big Circular Countdown */}
         <div className="flex flex-col items-center justify-center my-6">
-          <div className="relative w-52 h-52 flex items-center justify-center">
+          <div className="glow-accent relative w-52 h-52 flex items-center justify-center rounded-full">
             <svg className="w-full h-full transform -rotate-90">
               {/* Background circle */}
               <circle

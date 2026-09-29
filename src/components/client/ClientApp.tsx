@@ -243,55 +243,55 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
 
       {/* Persistent Mobile Bottom Navigation */}
       {showBottomNav && (
-        <div className="absolute bottom-0 inset-x-0 h-16 bg-[#16161A]/95 backdrop-blur-md border-t border-[#2A2A2F] flex items-center justify-around px-2 z-40">
+        <div className="absolute bottom-0 inset-x-0 h-16 w-full max-w-full bg-[#16161A]/95 backdrop-blur-md border-t border-[#2A2A2F] flex items-stretch z-40 overflow-hidden box-border">
           <button
             onClick={() => handleTabChange('hoy')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
               activeTab === 'hoy' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#8E8E94] hover:text-[#F5F4F0]'
             }`}
           >
-            <Home className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Hoy</span>
+            <Home className="w-5 h-5 shrink-0" />
+            <span className="text-[10px] font-semibold truncate w-full text-center">Hoy</span>
           </button>
 
           <button
             onClick={() => handleTabChange('entreno')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
               activeTab === 'entreno' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#8E8E94] hover:text-[#F5F4F0]'
             }`}
           >
-            <Dumbbell className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Entreno</span>
+            <Dumbbell className="w-5 h-5 shrink-0" />
+            <span className="text-[10px] font-semibold truncate w-full text-center">Entreno</span>
           </button>
 
           <button
             onClick={() => handleTabChange('progreso')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
               activeTab === 'progreso' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#8E8E94] hover:text-[#F5F4F0]'
             }`}
           >
-            <TrendingUp className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Progreso</span>
+            <TrendingUp className="w-5 h-5 shrink-0" />
+            <span className="text-[10px] font-semibold truncate w-full text-center">Progreso</span>
           </button>
 
           <button
             onClick={() => handleTabChange('nutricion')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
               activeTab === 'nutricion' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#8E8E94] hover:text-[#F5F4F0]'
             }`}
           >
-            <Apple className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Nutrición</span>
+            <Apple className="w-5 h-5 shrink-0" />
+            <span className="text-[10px] font-semibold truncate w-full text-center">Nutrición</span>
           </button>
 
           <button
             onClick={() => handleTabChange('perfil')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
               activeTab === 'perfil' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#8E8E94] hover:text-[#F5F4F0]'
             }`}
           >
-            <User className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Perfil</span>
+            <User className="w-5 h-5 shrink-0" />
+            <span className="text-[10px] font-semibold truncate w-full text-center">Perfil</span>
           </button>
         </div>
       )}

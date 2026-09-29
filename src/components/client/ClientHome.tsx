@@ -284,7 +284,6 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
                 {isTrainingDay && !isCompleted && !isPendingToday && !isProtected && (
                   <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-[#2A2A2F] flex items-center justify-center" />
                 )}
-                )}
               </div>
             );
           })}

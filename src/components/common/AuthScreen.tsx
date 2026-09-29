@@ -1,12 +1,32 @@
 import React, { useState } from 'react';
-import { Loader2, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
+import heroTrainingPhoto from '../../assets/hero-training.jpg';
+
+/* Marca S-Trainer: cinta doblada en forma de "S", gradiente azul-cian,
+   estilo original (no reproduce ningún logo de terceros). */
+const BrandMark: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 64 64" fill="none" className={className}>
+    <defs>
+      <linearGradient id="authBrandGradient" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#7DD8FF" />
+        <stop offset="55%" stopColor="#22B4E8" />
+        <stop offset="100%" stopColor="#1E6FE0" />
+      </linearGradient>
+    </defs>
+    <path
+      d="M50 8H31.5L14 24h18.5L14 40h18.5L14 56h18.5L50 40H31.5L50 24H31.5L50 8Z"
+      fill="url(#authBrandGradient)"
+    />
+  </svg>
+);
 
 export const AuthScreen: React.FC = () => {
   const { appName, signIn, authLoading } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
@@ -44,63 +64,96 @@ export const AuthScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#101012] text-[#F5F4F0] flex items-center justify-center p-5">
-      <div className="w-full max-w-md rounded-[28px] border border-[#2A2A2F] bg-[#16161A] p-7 shadow-2xl">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-11 h-11 rounded-2xl flex items-center justify-center p-2.5" style={{ backgroundColor: 'var(--accent-color,#CFFF5C)' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="#101012" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 17 L10 11 L14 15 L20 7" />
-              <path d="M14 7 H20 V13" />
-            </svg>
-          </div>
-          <div>
-            <div className="font-extrabold font-display text-lg">{appName}</div>
-            <div className="text-[10px] uppercase tracking-widest text-[#8E8E94] font-bold">Acceso</div>
-          </div>
+    <div className="relative min-h-screen w-full text-[#F5F4F0] overflow-hidden">
+      {/* Foto de fondo a pantalla completa */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${heroTrainingPhoto})` }}
+      />
+      {/* Veladura oscura para legibilidad del texto sobre la foto */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#05090B]/85 via-[#05090B]/55 to-[#05090B]/92" />
+
+      <div className="relative flex min-h-screen w-full flex-col items-center px-6 pb-8 pt-14">
+        {/* Marca */}
+        <BrandMark className="w-16 h-16 drop-shadow-[0_0_18px_rgba(34,180,232,0.55)]" />
+        <div className="mt-2 text-xl font-extrabold font-display tracking-[0.2em]">
+          {appName?.toUpperCase() || 'S-TRAINER'}
         </div>
 
-        <h1 className="text-2xl font-extrabold mb-2">Iniciar sesión</h1>
-        <p className="text-sm text-[#8E8E94] mb-6">Accede con una cuenta de S-TRAINER.</p>
+        <div className="flex-1" />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block">
-            <span className="block text-xs font-bold text-[#B8B8BE] mb-2">Correo</span>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#77777E]" />
-              <input value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" className="w-full rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] py-3 pl-10 pr-3 text-sm outline-none focus:border-[var(--accent-color,#CFFF5C)]" />
+        {/* Formulario */}
+        <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-3.5">
+          <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6]" />
+            <input
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              type="email"
+              autoComplete="email"
+              placeholder="Correo"
+              className="w-full rounded-2xl bg-[#101418]/60 border border-cyan-400/30 backdrop-blur-sm py-3.5 pl-11 pr-4 text-sm text-[#F5F4F0] placeholder:text-[#9AA0A6] outline-none focus:border-cyan-400/70 transition-colors"
+            />
+          </div>
+
+          <div className="relative">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9AA0A6]" />
+            <input
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="Contraseña"
+              className="w-full rounded-2xl bg-[#101418]/60 border border-cyan-400/30 backdrop-blur-sm py-3.5 pl-11 pr-11 text-sm text-[#F5F4F0] placeholder:text-[#9AA0A6] outline-none focus:border-cyan-400/70 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#9AA0A6] hover:text-[#F5F4F0] transition-colors"
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {error && (
+            <div className="rounded-2xl border border-red-400/30 bg-[#101418]/60 backdrop-blur-sm px-4 py-3 text-sm text-[#FF9B8A]">
+              {error}
             </div>
-          </label>
+          )}
 
-          <label className="block">
-            <span className="block text-xs font-bold text-[#B8B8BE] mb-2">Contraseña</span>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#77777E]" />
-              <input value={password} onChange={e => setPassword(e.target.value)} type="password" autoComplete="current-password" className="w-full rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] py-3 pl-10 pr-3 text-sm outline-none focus:border-[var(--accent-color,#CFFF5C)]" />
-            </div>
-          </label>
-
-          {error && <div className="rounded-xl border border-[#5A3030] bg-[#24191B] px-3 py-2.5 text-sm text-[#FF9B8A]">{error}</div>}
-
-          <button disabled={authLoading} className="w-full rounded-xl py-3 font-extrabold text-sm flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer" style={{ backgroundColor: 'var(--accent-color,#CFFF5C)', color: 'var(--accent-text,#101012)' }}>
-            {authLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            Entrar
+          <button
+            disabled={authLoading}
+            className="glow-cyan w-full rounded-2xl py-4 font-extrabold text-sm flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer bg-gradient-to-r from-cyan-300 to-cyan-500 text-[#05090B]"
+          >
+            {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+              <>
+                Entrar
+                <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
+              </>
+            )}
           </button>
 
           <button
             type="button"
             onClick={() => setRecoveryMode(v => !v)}
-            className="w-full text-center text-xs text-[#B8B8BE] hover:text-[#F5F4F0] underline underline-offset-2 cursor-pointer"
+            className="w-full text-center text-xs text-[#C7CBD1] hover:text-[#F5F4F0] underline underline-offset-2 cursor-pointer"
           >
             ¿Olvidaste tu contraseña?
           </button>
 
           {recoveryMode && (
-            <div className="rounded-xl border border-[#2A2A2F] bg-[#1B1B1F] p-3 text-xs text-[#B8B8BE]">
+            <div className="rounded-2xl border border-cyan-400/20 bg-[#101418]/60 backdrop-blur-sm p-3.5 text-xs text-[#C7CBD1]">
               Usa el correo escrito arriba para recibir un enlace de recuperación.
-              <button type="button" onClick={handleRecovery} disabled={recoveryLoading} className="mt-2 w-full rounded-lg py-2 font-bold text-[#101012] disabled:opacity-60 cursor-pointer" style={{ backgroundColor: 'var(--accent-color,#CFFF5C)' }}>
+              <button
+                type="button"
+                onClick={handleRecovery}
+                disabled={recoveryLoading}
+                className="mt-2.5 w-full rounded-xl py-2.5 font-bold text-[#05090B] bg-gradient-to-r from-cyan-300 to-cyan-500 disabled:opacity-60 cursor-pointer"
+              >
                 {recoveryLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
               </button>
-              {recoveryMessage && <p className="mt-2 text-[#9ED65A]">{recoveryMessage}</p>}
+              {recoveryMessage && <p className="mt-2 text-cyan-300">{recoveryMessage}</p>}
             </div>
           )}
         </form>

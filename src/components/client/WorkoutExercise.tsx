@@ -263,7 +263,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
         <button
           onClick={() => setShowIntro(false)}
           style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-          className="w-full py-4 rounded-full font-bold text-base shadow-lg transition-transform active:scale-[0.98] mt-6"
+          className="glow-accent w-full py-4 rounded-full font-bold text-base transition-transform active:scale-[0.98] mt-6"
         >
           Comenzar
         </button>
@@ -329,7 +329,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
         <button
           onClick={() => setPendingTransition(null)}
           style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-          className="w-full py-4 rounded-full font-bold text-base shadow-lg transition-transform active:scale-[0.98] mt-auto"
+          className="glow-accent w-full py-4 rounded-full font-bold text-base transition-transform active:scale-[0.98] mt-auto"
         >
           Continuar
         </button>
@@ -433,7 +433,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
       )}
 
       {/* Video Demonstration Card */}
-      <div className="relative w-full h-36 rounded-[16px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col items-center justify-center overflow-hidden mb-4 group cursor-pointer">
+      <div className="hero-abstract-bg relative w-full h-36 rounded-[16px] border border-[#2A2A2F] flex flex-col items-center justify-center overflow-hidden mb-4 group cursor-pointer">
         <div className="w-12 h-12 rounded-full bg-[#101012]/80 border border-[#3A3A40] flex items-center justify-center text-[#F5F4F0] group-hover:scale-110 group-hover:text-[var(--accent-color,#CFFF5C)] transition-all">
           <Play className="w-5 h-5 ml-0.5 fill-current" />
         </div>
@@ -504,7 +504,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
 
           if (isActive) {
             return (
-              <div key={idx} className="p-3 rounded-[14px] bg-[#1B1B1F] border-2 border-[var(--accent-color,#CFFF5C)] flex items-center justify-between shadow-lg">
+              <div key={idx} className="glow-accent p-3 rounded-[14px] bg-[#1B1B1F] border-2 border-[var(--accent-color,#CFFF5C)] flex items-center justify-between">
                 <span className="text-xs font-bold text-[#F5F4F0]">Serie {setNumber}</span>
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-0.5 bg-[#101012] border border-[#2A2A2F] rounded-lg px-1 py-1">
@@ -582,7 +582,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
         <button
           onClick={handleRegisterSet}
           style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-          className="w-full py-4 rounded-full font-bold text-base shadow-lg transition-transform active:scale-[0.98] mt-auto"
+          className="glow-accent w-full py-4 rounded-full font-bold text-base transition-transform active:scale-[0.98] mt-auto"
         >
           Registrar y descansar
         </button>

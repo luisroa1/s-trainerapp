@@ -1,7 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Check, User, MessageSquare, Moon, Sparkles } from 'lucide-react';
+import { Check, User, Bell, MessageSquare, Moon, MoonStar, Dumbbell, Salad, Flame, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { ClientMotivationalModal, MotivationType } from './ClientMotivationalModal';
+import heroTrainingPhoto from '../../assets/hero-training.jpg';
+
+/* Icono de zapatilla (no existe en lucide-react) — silueta de perfil,
+   para el chip de "Pasos", igual estilo trazo que el resto de íconos. */
+const ShoeIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
+    <path d="M2.5 15.2c0-.9.6-1.6 1.4-1.9l3.1-1c.6-.2 1.1-.6 1.4-1.1l1.6-2.7c.3-.5.9-.8 1.5-.8.9 0 1.6.7 1.6 1.6v1.1c0 .5.2.9.6 1.2l3.4 2.7c.5.4 1.1.6 1.7.6h2.2c.7 0 1.3.6 1.3 1.3v1.2c0 .8-.6 1.4-1.4 1.5-3.3.3-10.2.9-14.6.9-1.6 0-2.8-1.1-2.8-2.6Z" />
+    <path d="M3 16.4c1 .4 2.1.6 3.3.6h15.2" />
+  </svg>
+);
 
 interface ClientHomeProps {
   onStartWorkout: () => void;
@@ -128,56 +138,45 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
 
   const trainerMessage = cleanExerciseTip || trainingRelatedNote || defaultMessage;
 
-  // Formato de fecha actual localizada
-  const formattedToday = new Date().toLocaleDateString('es-ES', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short'
-  });
-  const capitalizedDate = formattedToday.charAt(0).toUpperCase() + formattedToday.slice(1);
-
   return (
-    <div className="flex flex-col min-h-full pb-20 px-5 pt-4 bg-[#101012] text-[#F5F4F0]">
+    <div className="flex flex-col min-h-full pb-[76px] px-5 pt-3 bg-[#101012] text-[#F5F4F0]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2.5">
-          <div 
-            className="w-7 h-7 rounded-lg flex items-center justify-center p-1.5 shadow-sm"
-            style={{ backgroundColor: 'var(--accent-color, #CFFF5C)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="#101012" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
-              <path d="M4 17 L10 11 L14 15 L20 7" />
-              <path d="M14 7 H20 V13" />
-            </svg>
-          </div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 24 32" fill="none" stroke="#22D3EE" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-9 shrink-0">
+            <path d="M17 2c-6 0-6 6 0 6s6 6 0 6-6 6 0 6" />
+            <path d="M7 2c6 0 6 6 0 6s-6 6 0 6 6 6 0 6" />
+          </svg>
           <div>
-            <h1 className="text-xs font-bold tracking-wider text-[#F5F4F0] font-display leading-tight">
+            <h1 className="text-lg font-extrabold tracking-tight text-[#F5F4F0] font-display leading-none">
               {appName}
             </h1>
-            <p className="text-[7.5px] tracking-[0.2em] text-[#8E8E94] font-semibold uppercase leading-none">
+            <p className="text-[8px] tracking-[0.25em] text-[#8E8E94] font-bold uppercase leading-none mt-1">
               ENTRENA · REPITE · PROGRESA
             </p>
           </div>
         </div>
 
-        <button 
-          onClick={() => onNavigateTab('perfil')}
-          className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40] transition-colors overflow-hidden"
-          title="Ver perfil"
-        >
-          {activeClient.avatarUrl ? (
-            <img src={activeClient.avatarUrl} alt={activeClient.name} className="w-full h-full object-cover" />
-          ) : (
-            <User className="w-4 h-4" />
-          )}
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Notificaciones — decorativo, sin acción todavía (igual que la fila "Notificaciones" en Perfil) */}
+          <Bell className="w-5 h-5 text-[#F5F4F0]" strokeWidth={1.75} />
+
+          <button
+            onClick={() => onNavigateTab('perfil')}
+            className="glow-cyan w-11 h-11 rounded-full bg-[#1B1B1F] border-2 border-cyan-400 flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] transition-colors overflow-hidden shrink-0"
+            title="Ver perfil"
+          >
+            {activeClient.avatarUrl ? (
+              <img src={activeClient.avatarUrl} alt={activeClient.name} className="w-full h-full object-cover" />
+            ) : (
+              <User className="w-5 h-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Greeting */}
-      <div className="mb-5">
-        <span className="text-xs text-[#8E8E94] font-medium block">
-          {capitalizedDate}
-        </span>
+      <div className="mb-4">
         <h2 className="text-2xl font-extrabold font-display text-[#F5F4F0] tracking-tight">
           Hola, {firstName}
         </h2>
@@ -206,39 +205,15 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
       )}
 
       {/* ESTA SEMANA circles */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2.5">
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">
             ESTA SEMANA
           </span>
-          <div className="flex items-center gap-1.5">
-            {/* Quick preview triggers for motivational popups */}
-            <button
-              onClick={() => setActiveModal('lunes')}
-              className="text-[9px] px-2 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94] hover:text-[#CFFF5C] transition-colors"
-              title="Ver popup Lunes"
-            >
-              Lunes
-            </button>
-            <button
-              onClick={() => setActiveModal('miercoles')}
-              className="text-[9px] px-2 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94] hover:text-[#CFFF5C] transition-colors"
-              title="Ver popup Miércoles"
-            >
-              Miérc
-            </button>
-            <button
-              onClick={() => setActiveModal('racha')}
-              className="text-[9px] px-2 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94] hover:text-[#CFFF5C] transition-colors"
-              title="Ver popup Racha completa"
-            >
-              Racha
-            </button>
-          </div>
         </div>
 
         {/* Days Circle Matrix */}
-        <div className="flex items-center justify-between px-1">
+        <div className="flex items-center justify-between">
           {weeklySchedule.map((dayItem, index) => {
             const isCompleted = dayItem.status === 'completed';
             const isPendingToday = dayItem.status === 'pending';
@@ -247,8 +222,8 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
             const isTrainingDay = dayItem.status !== 'rest';
 
             return (
-              <div key={index} className="flex flex-col items-center gap-1.5">
-                <span className="text-[11px] font-medium text-[#8E8E94]">
+              <div key={index} className="flex flex-col items-center gap-1.5 min-w-0">
+                <span className="text-[10px] font-medium text-[#8E8E94]">
                   {dayItem.day}
                 </span>
 
@@ -281,23 +256,35 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           })}
         </div>
 
-        <p className="text-[11px] text-[#8E8E94] mt-2.5 text-center font-medium">
+        <p className="text-[11px] text-[#8E8E94] mt-2 text-center font-medium">
           {completedCount}/{targetCount} entrenamientos completados
         </p>
       </div>
 
       {/* ENTRENAMIENTO DE HOY */}
-      <div className="hero-abstract-bg p-5 rounded-[20px] border border-[#2A2A2F] mb-5 shadow-lg">
-        <span className="text-[9.5px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-2">
+      <div className="relative rounded-[24px] border border-[#2A2A2F] mb-3 shadow-2xl overflow-hidden">
+        {/* Foto de fondo */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${heroTrainingPhoto})` }}
+        />
+        {/* Veladura oscura para legibilidad del texto sobre la foto */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0D] via-[#0B0B0D]/75 to-[#0B0B0D]/25" />
+        {/* Acentos de esquina en cian, estilo referencia */}
+        <div className="absolute top-0 left-0 w-16 h-16 border-t-2 border-l-2 border-cyan-400/70 rounded-tl-[24px] pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-16 h-16 border-b-2 border-r-2 border-cyan-400/70 rounded-br-[24px] pointer-events-none" />
+
+        <div className="relative p-5">
+        <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-2.5">
           ENTRENAMIENTO DE HOY
         </span>
 
         {!activeClient?.assignedProgramId ? (
           <div>
-            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
               Sin programa asignado
             </h3>
-            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-2.5">
               Contacta con tu entrenador para que te asigne una rutina personalizada
             </p>
             <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
@@ -309,10 +296,10 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           </div>
         ) : !assignedProgram ? (
           <div>
-            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
               Programa no disponible
             </h3>
-            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-2.5">
               Programa asignado: {activeClient.assignedProgramId}
             </p>
             <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
@@ -324,10 +311,10 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           </div>
         ) : isRestDay ? (
           <div>
-            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
               Día de descanso
             </h3>
-            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-2.5">
               Recuperación activa · Recarga energías para la próxima sesión
             </p>
             <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
@@ -339,13 +326,13 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           </div>
         ) : isTodayCompleted ? (
           <div>
-            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
               {currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}
             </h3>
-            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-2.5">
               {`Has completado ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'} hoy`}
             </p>
-            <div className="p-3 rounded-[12px] bg-[#16161A]/80 border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
+            <div className="p-3 rounded-[12px] bg-[#16161A]/80 border border-[#2A2A2F] flex items-start gap-2.5 mb-3">
               <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
               <p className="text-xs text-[#8E8E94] leading-relaxed">
                 <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
@@ -353,155 +340,175 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
             </div>
             {/* Estado final: sin onClick a propósito — no debe permitir
                 reiniciar el entrenamiento ya completado hoy. */}
-            <div className="glow-cyan w-full py-3.5 rounded-full border border-cyan-400/50 bg-[#101012] flex items-center justify-center gap-2.5">
-              <div className="w-6 h-6 rounded-full bg-cyan-400 flex items-center justify-center shrink-0">
-                <Check className="w-3.5 h-3.5 text-[#05090B] stroke-[3]" />
-              </div>
-              <span className="text-sm font-extrabold text-cyan-400">
-                Entrenamiento finalizado
+            <div className="glow-cyan w-full py-3.5 px-5 rounded-2xl border border-cyan-400/60 bg-[#101012]/90 flex items-center gap-3">
+              <Dumbbell className="w-7 h-7 text-[#F5F4F0] shrink-0" strokeWidth={2} />
+              <span className="flex-1 leading-tight">
+                <span className="block text-base font-extrabold text-[#F5F4F0]">Entrenamiento</span>
+                <span className="block text-base font-extrabold text-cyan-400">finalizado</span>
               </span>
+              <div className="w-9 h-9 rounded-full bg-cyan-400 flex items-center justify-center shrink-0">
+                <Check className="w-5 h-5 text-[#05090B] stroke-[3]" />
+              </div>
             </div>
           </div>
         ) : (
           <div>
-            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
               {currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}
             </h3>
-            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
+            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-2.5">
               {`${estimatedDurationText} · ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'}`}
             </p>
 
             {/* Coach tip note */}
-            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
+            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5 mb-3">
               <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
               <p className="text-xs text-[#8E8E94] leading-relaxed">
                 <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
               </p>
             </div>
 
-            {/* Action Button — mismo onClick y mismo texto condicional que antes */}
+            {/* Action Button — mismo onClick y mismo texto condicional que antes, solo cambia el formato visual */}
             <button
               onClick={onStartWorkout}
-              style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-              className="glow-accent w-full py-3.5 rounded-full font-extrabold text-sm transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
+              className="glow-cyan w-full py-3 pl-5 pr-3 rounded-2xl border border-cyan-300/70 bg-gradient-to-r from-cyan-400/30 via-cyan-400/15 to-transparent backdrop-blur-sm transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-between gap-3"
             >
-              <Sparkles className="w-4 h-4 fill-current" />
-              {hasActiveSession ? 'Continuar entrenamiento' : 'Empezar entrenamiento'}
+              <span className="flex items-center gap-3 min-w-0">
+                <Dumbbell className="w-6 h-6 text-[#F5F4F0] shrink-0" strokeWidth={2} />
+                <span className="text-base font-extrabold text-[#F5F4F0] text-left leading-tight">
+                  {(() => {
+                    const label = hasActiveSession ? 'Continuar entrenamiento' : 'Empezar entrenamiento';
+                    const [firstWord, ...rest] = label.split(' ');
+                    return (
+                      <>
+                        <span className="block">{firstWord}</span>
+                        <span className="block">{rest.join(' ')}</span>
+                      </>
+                    );
+                  })()}
+                </span>
+              </span>
+              <span className="w-9 h-9 rounded-full bg-cyan-400 flex items-center justify-center shrink-0">
+                <ChevronRight className="w-5 h-5 text-[#05090B]" strokeWidth={3} />
+              </span>
             </button>
           </div>
         )}
+        </div>
       </div>
 
-      {/* 2x2 Metric Grid with exact color coding */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Metric chips — icono con glow + número + etiqueta, misma fila (mismos 5 datos reales que antes) */}
+      <div className="flex items-stretch justify-between gap-1.5">
         {/* Pasos (#FF6B4A) */}
-        <div className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            PASOS
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
+          <ShoeIcon className="w-5 h-5 shrink-0" style={{ color: '#5CD6FF', filter: 'drop-shadow(0 0 5px rgba(92,214,255,0.75))' }} />
+          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
+            {activeClient.metrics.stepsToday.toLocaleString()}
           </span>
-          <div className="my-2">
-            <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
-              {activeClient.metrics.stepsToday.toLocaleString()}
-            </span>
-            <span className="text-xs text-[#8E8E94] font-medium ml-1">
-              / {activeClient.metrics.stepsGoal.toLocaleString()}
-            </span>
-          </div>
-          <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div 
-              className="h-full rounded-full transition-all duration-500"
-              style={{ 
-                backgroundColor: '#FF6B4A', 
-                width: `${Math.min(100, (activeClient.metrics.stepsToday / activeClient.metrics.stepsGoal) * 100)}%` 
-              }}
-            />
-          </div>
+          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
+            Pasos
+          </span>
         </div>
 
         {/* Entrenamientos (dato ya calculado arriba: completedCount/targetCount) */}
-        <div className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            ENTRENAMIENTOS
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
+          <Dumbbell className="w-5 h-5 shrink-0" style={{ color: 'var(--accent-color, #CFFF5C)', filter: 'drop-shadow(0 0 5px rgba(207,255,92,0.75))' }} />
+          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
+            {completedCount}/{targetCount}
           </span>
-          <div className="my-2">
-            <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
-              {completedCount}
-            </span>
-            <span className="text-xs text-[#8E8E94] font-medium ml-1">
-              / {targetCount}
-            </span>
-          </div>
-          <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                backgroundColor: 'var(--accent-color, #CFFF5C)',
-                width: `${targetCount > 0 ? Math.min(100, (completedCount / targetCount) * 100) : 0}%`
-              }}
-            />
-          </div>
+          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
+            Entren.
+          </span>
         </div>
 
-        {/* Nutrición (#CFFF5C) */}
-        <div 
+        {/* Kcal (mismo dato real de kcal de hoy) */}
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
+          <Flame className="w-5 h-5 shrink-0" style={{ color: '#FF6B4A', filter: 'drop-shadow(0 0 5px rgba(255,107,74,0.75))' }} />
+          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
+            {activeClient.metrics.kcalToday.toLocaleString()}
+          </span>
+          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
+            Kcal
+          </span>
+        </div>
+
+        {/* Nutrición (mismo dato real de kcal de hoy — enlaza a la pestaña Nutrición) */}
+        <div
           onClick={() => onNavigateTab('nutricion')}
-          className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
+          className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] cursor-pointer hover:border-[#3A3A40] transition-colors"
         >
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            NUTRICIÓN
+          <Salad className="w-5 h-5 shrink-0" style={{ color: '#5CFFC4', filter: 'drop-shadow(0 0 5px rgba(92,255,196,0.75))' }} />
+          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
+            {activeClient.metrics.kcalToday.toLocaleString()}
           </span>
-          <div className="my-2">
-            <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
-              {activeClient.metrics.kcalToday.toLocaleString()}
-            </span>
-            <span className="text-xs text-[#8E8E94] font-medium ml-1">
-              / {activeClient.metrics.kcalGoal.toLocaleString()} kcal
-            </span>
-          </div>
-          <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div 
-              className="h-full rounded-full transition-all duration-500"
-              style={{ 
-                backgroundColor: 'var(--accent-color, #CFFF5C)', 
-                width: `${Math.min(100, (activeClient.metrics.kcalToday / activeClient.metrics.kcalGoal) * 100)}%` 
-              }}
-            />
-          </div>
+          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
+            Nutrición
+          </span>
         </div>
 
-        {/* Peso (#5CD6FF) */}
-        <div 
-          onClick={() => onNavigateTab('progreso')}
-          className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
-        >
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            PESO
+        {/* Sueño (#B388FF) */}
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
+          <MoonStar className="w-5 h-5 shrink-0" style={{ color: '#B388FF', filter: 'drop-shadow(0 0 5px rgba(179,136,255,0.75))' }} />
+          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
+            {activeClient.metrics.sleepHours}
           </span>
-          <div className="my-1.5">
-            <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
-              {activeClient.currentWeight.toFixed(1).replace('.', ',')} kg
-            </span>
-          </div>
-          <p className="text-[10px] text-[#5CD6FF] font-medium">
-            {activeClient.weightWeeklyTrend}
-          </p>
-        </div>
-
-        {/* Sueño (#B388FF) — ocupa el ancho completo (5º elemento en un grid de 2 columnas) */}
-        <div className="col-span-2 p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            SUEÑO
+          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
+            Sueño
           </span>
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
-              {activeClient.metrics.sleepHours}
-            </span>
-            <p className="text-[10px] text-[#B388FF] font-medium">
-              {activeClient.metrics.sleepQuality}
-            </p>
-          </div>
         </div>
       </div>
+
+      {/* Entrenamiento de hoy — tarjeta con miniatura, mismos datos reales que el hero de arriba */}
+      {assignedProgram && currentDay && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2.5">
+            <h3 className="text-base font-extrabold font-display text-[#F5F4F0]">
+              Entrenamiento de hoy
+            </h3>
+            <button
+              onClick={() => onNavigateTab('entreno')}
+              className="text-xs font-bold text-cyan-400"
+            >
+              Ver todo
+            </button>
+          </div>
+
+          <div className="p-2 rounded-[18px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center gap-3">
+            <div
+              className="w-14 h-14 rounded-[12px] bg-cover bg-center shrink-0"
+              style={{ backgroundImage: `url(${heroTrainingPhoto})` }}
+            />
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-extrabold font-display text-[#F5F4F0] leading-tight truncate">
+                {currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}
+              </h4>
+              <p className="text-[11px] text-[#8E8E94] font-medium mt-0.5 mb-1.5">
+                {`${estimatedDurationText}  |  ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'}`}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-full bg-[#232328] flex items-center justify-center">
+                  <Dumbbell className="w-3 h-3 text-[#8E8E94]" />
+                </span>
+                <span className="w-6 h-6 rounded-full bg-[#232328] flex items-center justify-center text-[9px] font-bold text-[#8E8E94]">
+                  {currentDay?.exercises?.length || 0}
+                </span>
+                <span className="w-6 h-6 rounded-full bg-[#232328] flex items-center justify-center text-[#8E8E94]">
+                  <MoreHorizontal className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={isTodayCompleted ? undefined : onStartWorkout}
+              disabled={isTodayCompleted}
+              className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-[0.95] ${
+                isTodayCompleted ? 'bg-[#232328] text-[#5C5C62]' : 'glow-cyan bg-cyan-400 text-[#05090B]'
+              }`}
+            >
+              <ChevronRight className="w-5 h-5" strokeWidth={3} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Motivational Modal if open */}
       {activeModal && (

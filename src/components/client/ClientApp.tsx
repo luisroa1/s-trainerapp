@@ -243,54 +243,54 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
 
       {/* Persistent Mobile Bottom Navigation */}
       {showBottomNav && (
-        <div className="absolute bottom-0 inset-x-0 h-16 w-full max-w-full bg-[#16161A]/95 backdrop-blur-md border-t border-[#2A2A2F] flex items-stretch z-40 overflow-hidden box-border">
+        <div className="absolute bottom-0 inset-x-0 h-[68px] w-full max-w-full bg-[#16161A]/95 backdrop-blur-md border-t border-[#2A2A2F] flex items-stretch z-40 overflow-hidden box-border px-1.5 pb-1">
           <button
             onClick={() => handleTabChange('hoy')}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
-              activeTab === 'hoy' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#5C5C62] hover:text-[#8E8E94]'
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 mx-0.5 my-1.5 rounded-2xl transition-colors ${
+              activeTab === 'hoy' ? 'text-cyan-400 bg-cyan-400/10' : 'text-[#5C5C62] hover:text-[#8E8E94]'
             }`}
           >
-            <Home className="w-5 h-5 shrink-0" strokeWidth={activeTab === 'hoy' ? 2.5 : 1.75} />
+            <Home className={`shrink-0 ${activeTab === 'hoy' ? 'w-6 h-6' : 'w-5 h-5'}`} strokeWidth={activeTab === 'hoy' ? 2.5 : 1.75} />
             <span className={`text-[10px] truncate w-full text-center ${activeTab === 'hoy' ? 'font-bold' : 'font-medium'}`}>Hoy</span>
           </button>
 
           <button
             onClick={() => handleTabChange('entreno')}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
-              activeTab === 'entreno' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#5C5C62] hover:text-[#8E8E94]'
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 mx-0.5 my-1.5 rounded-2xl transition-colors ${
+              activeTab === 'entreno' ? 'text-cyan-400 bg-cyan-400/10' : 'text-[#5C5C62] hover:text-[#8E8E94]'
             }`}
           >
-            <Dumbbell className="w-5 h-5 shrink-0" strokeWidth={activeTab === 'entreno' ? 2.5 : 1.75} />
+            <Dumbbell className={`shrink-0 ${activeTab === 'entreno' ? 'w-6 h-6' : 'w-5 h-5'}`} strokeWidth={activeTab === 'entreno' ? 2.5 : 1.75} />
             <span className={`text-[10px] truncate w-full text-center ${activeTab === 'entreno' ? 'font-bold' : 'font-medium'}`}>Entreno</span>
           </button>
 
           <button
             onClick={() => handleTabChange('progreso')}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
-              activeTab === 'progreso' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#5C5C62] hover:text-[#8E8E94]'
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 mx-0.5 my-1.5 rounded-2xl transition-colors ${
+              activeTab === 'progreso' ? 'text-cyan-400 bg-cyan-400/10' : 'text-[#5C5C62] hover:text-[#8E8E94]'
             }`}
           >
-            <TrendingUp className="w-5 h-5 shrink-0" strokeWidth={activeTab === 'progreso' ? 2.5 : 1.75} />
+            <TrendingUp className={`shrink-0 ${activeTab === 'progreso' ? 'w-6 h-6' : 'w-5 h-5'}`} strokeWidth={activeTab === 'progreso' ? 2.5 : 1.75} />
             <span className={`text-[10px] truncate w-full text-center ${activeTab === 'progreso' ? 'font-bold' : 'font-medium'}`}>Progreso</span>
           </button>
 
           <button
             onClick={() => handleTabChange('nutricion')}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
-              activeTab === 'nutricion' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#5C5C62] hover:text-[#8E8E94]'
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 mx-0.5 my-1.5 rounded-2xl transition-colors ${
+              activeTab === 'nutricion' ? 'text-cyan-400 bg-cyan-400/10' : 'text-[#5C5C62] hover:text-[#8E8E94]'
             }`}
           >
-            <Apple className="w-5 h-5 shrink-0" strokeWidth={activeTab === 'nutricion' ? 2.5 : 1.75} />
+            <Apple className={`shrink-0 ${activeTab === 'nutricion' ? 'w-6 h-6' : 'w-5 h-5'}`} strokeWidth={activeTab === 'nutricion' ? 2.5 : 1.75} />
             <span className={`text-[10px] truncate w-full text-center ${activeTab === 'nutricion' ? 'font-bold' : 'font-medium'}`}>Nutrición</span>
           </button>
 
           <button
             onClick={() => handleTabChange('perfil')}
-            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 transition-colors ${
-              activeTab === 'perfil' ? 'text-[var(--accent-color,#CFFF5C)]' : 'text-[#5C5C62] hover:text-[#8E8E94]'
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 px-1 mx-0.5 my-1.5 rounded-2xl transition-colors ${
+              activeTab === 'perfil' ? 'text-cyan-400 bg-cyan-400/10' : 'text-[#5C5C62] hover:text-[#8E8E94]'
             }`}
           >
-            <User className="w-5 h-5 shrink-0" strokeWidth={activeTab === 'perfil' ? 2.5 : 1.75} />
+            <User className={`shrink-0 ${activeTab === 'perfil' ? 'w-6 h-6' : 'w-5 h-5'}`} strokeWidth={activeTab === 'perfil' ? 2.5 : 1.75} />
             <span className={`text-[10px] truncate w-full text-center ${activeTab === 'perfil' ? 'font-bold' : 'font-medium'}`}>Perfil</span>
           </button>
         </div>

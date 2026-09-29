@@ -1,12 +1,11 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
-  User, 
-  Ruler, 
-  Camera, 
-  Moon, 
-  Activity, 
-  Droplet, 
+  User,
+  Ruler,
+  Camera,
+  Moon,
+  Droplet,
   Pill, 
   Bell, 
   HelpCircle, 
@@ -65,14 +64,14 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
             <img
               src={activeClient.avatarUrl}
               alt={activeClient.name}
-              className="w-14 h-14 rounded-full object-cover border-2 border-[var(--accent-color,#CFFF5C)] shadow-md"
+              className="glow-cyan w-16 h-16 rounded-full object-cover border-2 border-cyan-400 shadow-md"
             />
           ) : (
-            <div className="w-14 h-14 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-display font-extrabold text-base text-[#F5F4F0] shadow-md group-hover:border-[var(--accent-color,#CFFF5C)] transition-colors">
+            <div className="glow-cyan w-16 h-16 rounded-full bg-[#1B1B1F] border-2 border-cyan-400 flex items-center justify-center font-display font-extrabold text-base text-[#F5F4F0] shadow-md transition-colors">
               {activeClient.initials}
             </div>
           )}
-          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[var(--accent-color,#CFFF5C)] text-[#101012] flex items-center justify-center shadow-md">
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-cyan-400 text-[#101012] flex items-center justify-center shadow-md">
             <Camera className="w-3 h-3" />
           </div>
         </div>
@@ -84,8 +83,8 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
             {activeClient.objective}
           </p>
           {supabaseUser && (
-            <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-[#CFFF5C]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#CFFF5C] animate-pulse" />
+            <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-cyan-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
               <span className="truncate max-w-[170px]">{supabaseUser.email}</span>
               <span className="px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider bg-[#1B1B1F] border border-[#2A2A2F] text-[#F5F4F0]">
                 {userRole || 'cliente'}
@@ -150,17 +149,6 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
             )}
             <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
           </div>
-        </div>
-
-        {/* Dispositivos conectados: Apple Health */}
-        <div className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Activity className="w-4 h-4 text-[#5CD6FF]" />
-            <span className="text-xs font-semibold text-[#F5F4F0]">Dispositivos conectados</span>
-          </div>
-          <span className="text-[10px] font-bold text-[#CFFF5C] bg-[#CFFF5C]/15 px-2.5 py-0.5 rounded-full border border-[#CFFF5C]/20">
-            Apple Health
-          </span>
         </div>
 
         {/* Recordatorios */}

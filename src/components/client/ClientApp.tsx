@@ -119,7 +119,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
   ].includes(currentScreen);
 
   return (
-    <div className="relative w-full h-full bg-[#101012] text-[#F5F4F0] flex flex-col overflow-hidden">
+    <div className="relative w-full h-full max-w-[430px] mx-auto bg-[#101012] text-[#F5F4F0] flex flex-col overflow-hidden">
       {/* Screen View Container */}
       <div className="flex-1 overflow-y-auto">
         {currentScreen === 'activate' && (

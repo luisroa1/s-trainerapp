@@ -254,35 +254,27 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
 
                 {isCompleted && (
                   <div
-                    className="w-9 h-9 rounded-full bg-cyan-400 text-[#05090B] flex items-center justify-center shadow-md transition-transform hover:scale-105"
-                  >
-                    <Check className="w-5 h-5 stroke-[3]" />
-                  </div>
+                    className="w-9 h-9 rounded-full bg-transparent border-2 border-cyan-400 transition-transform hover:scale-105"
+                  />
                 )}
 
                 {isPendingToday && (
-                  <div className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-red-500 flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                  </div>
+                  <div className="w-9 h-9 rounded-full bg-transparent border-2 border-red-500" />
                 )}
 
                 {isProtected && (
                   <div
                     onClick={() => setActiveModal('racha_protegida')}
-                    className="w-9 h-9 rounded-full bg-[#1B1B1F] border-2 border-cyan-400 flex items-center justify-center cursor-pointer"
+                    className="w-9 h-9 rounded-full bg-transparent border-2 border-dashed border-cyan-400 cursor-pointer"
                     title="Racha protegida"
-                  >
-                    <div className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                  </div>
+                  />
                 )}
 
                 {isRest && (
-                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-[#2A2A2F] flex items-center justify-center">
-                    <span className="text-sm font-bold text-[#3A3A40]">—</span>
-                  </div>
+                  <div className="w-9 h-9 rounded-full bg-transparent border-2 border-[#2A2A2F]" />
                 )}
                 {isTrainingDay && !isCompleted && !isPendingToday && !isProtected && (
-                  <div className="w-9 h-9 rounded-full bg-[#16161A] border-2 border-[#2A2A2F] flex items-center justify-center" />
+                  <div className="w-9 h-9 rounded-full bg-transparent border-2 border-[#2A2A2F]" />
                 )}
               </div>
             );
@@ -295,8 +287,8 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
       </div>
 
       {/* ENTRENAMIENTO DE HOY */}
-      <div className="p-4 rounded-[16px] bg-[#1B1B1F] border border-[#2A2A2F] mb-5 shadow-lg">
-        <span className="text-[9.5px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
+      <div className="hero-abstract-bg p-5 rounded-[20px] border border-[#2A2A2F] mb-5 shadow-lg">
+        <span className="text-[9.5px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-2">
           ENTRENAMIENTO DE HOY
         </span>
 
@@ -347,26 +339,26 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           </div>
         ) : isTodayCompleted ? (
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-6 h-6 rounded-full bg-cyan-400 flex items-center justify-center shrink-0">
-                <Check className="w-3.5 h-3.5 text-[#05090B] stroke-[3]" />
-              </div>
-              <h3 className="text-2xl font-extrabold font-display text-cyan-400 leading-tight">
-                Entrenamiento completado
-              </h3>
-            </div>
+            <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
+              {currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}
+            </h3>
             <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-3.5">
-              {`Has completado ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'} hoy · ${currentDay?.focusArea || currentDay?.title || 'Entrenamiento'}`}
+              {`Has completado ${currentDay?.exercises?.length || 0} ejercicio${(currentDay?.exercises?.length || 0) === 1 ? '' : 's'} hoy`}
             </p>
-            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
+            <div className="p-3 rounded-[12px] bg-[#16161A]/80 border border-[#2A2A2F] flex items-start gap-2.5 mb-4">
               <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
               <p className="text-xs text-[#8E8E94] leading-relaxed">
                 <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}
               </p>
             </div>
-            <div className="w-full py-3.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 flex items-center justify-center">
+            {/* Estado final: sin onClick a propósito — no debe permitir
+                reiniciar el entrenamiento ya completado hoy. */}
+            <div className="glow-cyan w-full py-3.5 rounded-full border border-cyan-400/50 bg-[#101012] flex items-center justify-center gap-2.5">
+              <div className="w-6 h-6 rounded-full bg-cyan-400 flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5 text-[#05090B] stroke-[3]" />
+              </div>
               <span className="text-sm font-extrabold text-cyan-400">
-                Lo has hecho hoy. Mañana por más.
+                Entrenamiento finalizado
               </span>
             </div>
           </div>
@@ -387,11 +379,11 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
               </p>
             </div>
 
-            {/* Action Button */}
+            {/* Action Button — mismo onClick y mismo texto condicional que antes */}
             <button
               onClick={onStartWorkout}
               style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-              className="w-full py-3.5 rounded-full font-extrabold text-sm shadow-md transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
+              className="glow-accent w-full py-3.5 rounded-full font-extrabold text-sm transition-all active:scale-[0.98] hover:opacity-95 flex items-center justify-center gap-2"
             >
               <Sparkles className="w-4 h-4 fill-current" />
               {hasActiveSession ? 'Continuar entrenamiento' : 'Empezar entrenamiento'}
@@ -421,6 +413,30 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
               style={{ 
                 backgroundColor: '#FF6B4A', 
                 width: `${Math.min(100, (activeClient.metrics.stepsToday / activeClient.metrics.stepsGoal) * 100)}%` 
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Entrenamientos (dato ya calculado arriba: completedCount/targetCount) */}
+        <div className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col justify-between">
+          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
+            ENTRENAMIENTOS
+          </span>
+          <div className="my-2">
+            <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
+              {completedCount}
+            </span>
+            <span className="text-xs text-[#8E8E94] font-medium ml-1">
+              / {targetCount}
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                backgroundColor: 'var(--accent-color, #CFFF5C)',
+                width: `${targetCount > 0 ? Math.min(100, (completedCount / targetCount) * 100) : 0}%`
               }}
             />
           </div>
@@ -471,19 +487,19 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           </p>
         </div>
 
-        {/* Sueño (#B388FF) */}
-        <div className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col justify-between">
+        {/* Sueño (#B388FF) — ocupa el ancho completo (5º elemento en un grid de 2 columnas) */}
+        <div className="col-span-2 p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
           <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
             SUEÑO
           </span>
-          <div className="my-1.5">
+          <div className="flex items-center gap-2">
             <span className="text-lg font-extrabold font-display text-[#F5F4F0]">
               {activeClient.metrics.sleepHours}
             </span>
+            <p className="text-[10px] text-[#B388FF] font-medium">
+              {activeClient.metrics.sleepQuality}
+            </p>
           </div>
-          <p className="text-[10px] text-[#B388FF] font-medium">
-            {activeClient.metrics.sleepQuality}
-          </p>
         </div>
       </div>
 

@@ -70,7 +70,7 @@ Deno.serve(async (req: Request) => {
       console.error('Error al consultar perfil del entrenador:', profileError);
     }
 
-    const isTrainer = callerProfile?.role === 'trainer' || callerUser.user_metadata?.role === 'trainer';
+    const isTrainer = callerProfile?.role === 'trainer';
     if (!isTrainer) {
       return new Response(
         JSON.stringify({
@@ -87,9 +87,10 @@ Deno.serve(async (req: Request) => {
       email,
       objective = 'Pérdida de grasa',
       startDate,
-      assignedProgramId = 'prog-1',
+      assignedProgramId: rawAssignedProgramId,
       redirectTo: customRedirectTo,
     } = body;
+    const assignedProgramId = rawAssignedProgramId || 'prog-1';
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return new Response(
@@ -107,6 +108,32 @@ Deno.serve(async (req: Request) => {
 
     const cleanEmail = email.toLowerCase().trim();
     const cleanName = name.trim();
+
+    // 5b. Verificar que el programa asignado pertenece al entrenador autenticado
+    if (assignedProgramId) {
+      const { data: programRow, error: programErr } = await adminClient
+        .from('programs')
+        .select('id, trainer_id')
+        .eq('id', assignedProgramId)
+        .maybeSingle();
+
+      if (programErr) {
+        console.error('Error al verificar ownership del programa:', programErr);
+        return new Response(
+          JSON.stringify({ error: 'No se pudo verificar el programa asignado.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!programRow || programRow.trainer_id !== callerUser.id) {
+        return new Response(
+          JSON.stringify({
+            error: 'Acceso denegado (403): el programa asignado no pertenece al entrenador autenticado.',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // 5. Verificar si el email ya existe como cliente o como usuario
     // A) En la tabla clients

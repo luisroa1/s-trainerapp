@@ -169,8 +169,15 @@ Deno.serve(async (req: Request) => {
     }
 
     // 6. Configurar la URL de redirección a la página de activación
-    const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL') || 'https://s-trainerapp.ai.studio';
-    const finalRedirectTo = customRedirectTo || `${appUrl}/#activate`;
+    const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL');
+    if (!customRedirectTo && !appUrl) {
+      console.error('Faltan APP_URL o SITE_URL para construir el redirect de invitación');
+      return new Response(
+        JSON.stringify({ error: 'Configuración incompleta: falta APP_URL o SITE_URL.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const finalRedirectTo = customRedirectTo || new URL('/?flow=activate', appUrl).toString();
 
     // 7. Enviar la invitación mediante supabase.auth.admin.inviteUserByEmail
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(

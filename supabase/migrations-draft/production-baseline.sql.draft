@@ -1,0 +1,252 @@
+-- CANDIDATE ONLY: copied from the evidence-backed draft; NOT APPLIED anywhere.
+-- NO VALIDADA FROM SCRATCH: clean validation was blocked by the Supabase Free-project limit.
+-- Do not move into supabase/migrations or apply until a new isolated project validates it.
+-- This is not a CLI-generated or clean-rebuild-validated migration.
+-- Draft source SHA-256 is recorded in SHA256SUMS-PHASE12.txt.
+-- Source: previously captured production catalog evidence (provenance retained outside this proposal).
+-- IMPORTANT: this captures catalog-visible objects, not Auth/project settings or production data.
+-- PRECONDITIONS/PENDING: managed roles/schemas/extensions and auth.users must exist; see RECONCILIATION.md.
+
+BEGIN;
+
+-- Extensions observed installed. Exact installation/schema availability is platform-dependent; intentionally not applied here.
+-- OBSERVED EXTENSION: pg_stat_statements 1.11 in schema extensions; confirm necessity/platform support before adding CREATE EXTENSION.
+-- OBSERVED EXTENSION: pgcrypto 1.3 in schema extensions; confirm necessity/platform support before adding CREATE EXTENSION.
+-- OBSERVED EXTENSION: plpgsql 1.0 in schema pg_catalog; confirm necessity/platform support before adding CREATE EXTENSION.
+-- OBSERVED EXTENSION: supabase_vault 0.3.1 in schema vault; confirm necessity/platform support before adding CREATE EXTENSION.
+-- OBSERVED EXTENSION: uuid-ossp 1.1 in schema extensions; confirm necessity/platform support before adding CREATE EXTENSION.
+
+-- Tables: catalog column definitions, defaults/nullability and listed constraints.
+CREATE TABLE public.clients (
+  id text NOT NULL,
+  user_id uuid,
+  trainer_id text DEFAULT 'trn-1'::text,
+  name text NOT NULL,
+  email text,
+  phone text,
+  sex text DEFAULT 'Hombre'::text,
+  height text,
+  objective text,
+  status text DEFAULT 'Activo'::text,
+  current_weight numeric,
+  adherence_percentage numeric DEFAULT 100,
+  assigned_program_id text DEFAULT 'prog-1'::text,
+  data jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT clients_email_key UNIQUE (email),
+  CONSTRAINT clients_pkey PRIMARY KEY (id),
+  CONSTRAINT clients_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE public.nutrition_plans (
+  id text NOT NULL,
+  client_id text NOT NULL,
+  trainer_id text DEFAULT 'trn-1'::text,
+  data jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT nutrition_plans_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  email text NOT NULL,
+  role text DEFAULT 'client'::text NOT NULL,
+  full_name text,
+  phone text,
+  avatar_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE,
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_role_check CHECK (role = ANY (ARRAY['trainer'::text, 'client'::text, 'admin'::text]))
+);
+
+CREATE TABLE public.programs (
+  id text NOT NULL,
+  trainer_id text DEFAULT 'trn-1'::text,
+  name text NOT NULL,
+  type text,
+  level text,
+  duration_weeks integer DEFAULT 4,
+  days_per_week integer DEFAULT 4,
+  data jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT programs_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.trainer_profiles (
+  id text NOT NULL,
+  name text NOT NULL,
+  email text NOT NULL,
+  initials text,
+  role text DEFAULT 'Entrenador'::text,
+  avatar_url text,
+  coupon_code text,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT trainer_profiles_pkey PRIMARY KEY (id)
+);
+
+-- Index evidence: all 6 observed indexes back the PK/UNIQUE constraints above; no additional standalone indexes were captured.
+
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.nutrition_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.programs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trainer_profiles ENABLE ROW LEVEL SECURITY;
+
+-- Captured function metadata: security=SECURITY INVOKER; owner=postgres; acl==X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres
+CREATE OR REPLACE FUNCTION public.enforce_client_program_ownership()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  IF NEW.assigned_program_id IS NOT NULL
+     AND (TG_OP = 'INSERT' OR NEW.assigned_program_id IS DISTINCT FROM OLD.assigned_program_id) THEN
+    IF NOT public.is_admin() THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM public.programs pr
+        WHERE pr.id = NEW.assigned_program_id
+          AND pr.trainer_id = NEW.trainer_id
+      ) THEN
+        RAISE EXCEPTION 'No autorizado: assigned_program_id debe pertenecer al mismo trainer_id del cliente';
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+-- Captured function metadata: security=SECURITY INVOKER; owner=postgres; acl==X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres
+CREATE OR REPLACE FUNCTION public.enforce_client_structural_immutability()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  IF (NEW.trainer_id IS DISTINCT FROM OLD.trainer_id)
+     OR (NEW.user_id IS DISTINCT FROM OLD.user_id) THEN
+    IF NOT (public.is_admin() OR current_user = 'service_role') THEN
+      RAISE EXCEPTION 'No autorizado: trainer_id y user_id son columnas estructurales; solo un administrador o el backend (service_role) pueden modificarlas';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+-- Captured function metadata: security=SECURITY INVOKER; owner=postgres; acl==X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres
+CREATE OR REPLACE FUNCTION public.enforce_profile_role_immutability()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    IF NOT (public.is_admin() OR current_user = 'service_role') THEN
+      RAISE EXCEPTION 'No autorizado: solo un administrador o el backend (service_role) puede cambiar profiles.role';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+-- Captured function metadata: security=SECURITY DEFINER; owner=postgres; acl=postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, role, created_at, updated_at)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    'client',
+    now(), now()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$function$;
+
+-- Captured function metadata: security=SECURITY DEFINER; owner=postgres; acl==X/postgres, postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres
+CREATE OR REPLACE FUNCTION public.is_admin()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
+$function$;
+
+-- Least-privilege candidate ACLs; deliberately do NOT reproduce captured anon grants.
+-- Public/anon receives no table access. Authenticated app flows use row-scoped policies
+-- and only SELECT/INSERT/UPDATE; no runtime code path found needs TRUNCATE, REFERENCES,
+-- TRIGGER, or direct DELETE privileges. Edge Functions use service_role only for client/profile
+-- invite/activation reads and writes. RLS remains the row-level enforcement for authenticated.
+REVOKE ALL PRIVILEGES ON TABLE public.clients, public.nutrition_plans, public.profiles, public.programs, public.trainer_profiles FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT SELECT, INSERT, UPDATE ON TABLE public.clients TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.nutrition_plans TO authenticated;
+GRANT SELECT, UPDATE ON TABLE public.profiles TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.programs TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.trainer_profiles TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE ON TABLE public.clients TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.profiles TO service_role;
+GRANT SELECT ON TABLE public.programs TO service_role;
+
+-- Trigger helpers are executable only in the authenticated/service-role write paths;
+-- user-created SQL roles receive no direct execution of the Auth trigger helper.
+REVOKE ALL ON FUNCTION public.enforce_client_program_ownership() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.enforce_client_structural_immutability() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.enforce_profile_role_immutability() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.enforce_client_program_ownership() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.enforce_client_structural_immutability() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.enforce_profile_role_immutability() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO postgres;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, service_role;
+
+CREATE POLICY clients_delete ON public.clients AS PERMISSIVE FOR DELETE TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY clients_insert ON public.clients AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((is_admin() OR ((trainer_id = (auth.uid())::text) AND (EXISTS ( SELECT 1
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'trainer'::text)))) AND ((assigned_program_id IS NULL) OR (EXISTS ( SELECT 1
+   FROM programs pr
+  WHERE ((pr.id = clients.assigned_program_id) AND (pr.trainer_id = (auth.uid())::text))))))));
+CREATE POLICY clients_select ON public.clients AS PERMISSIVE FOR SELECT TO authenticated USING (((trainer_id = (auth.uid())::text) OR (user_id = auth.uid()) OR is_admin()));
+CREATE POLICY clients_update ON public.clients AS PERMISSIVE FOR UPDATE TO authenticated USING (((trainer_id = (auth.uid())::text) OR (user_id = auth.uid()) OR is_admin())) WITH CHECK (((trainer_id = (auth.uid())::text) OR (user_id = auth.uid()) OR is_admin()));
+CREATE POLICY nutrition_delete ON public.nutrition_plans AS PERMISSIVE FOR DELETE TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY nutrition_insert ON public.nutrition_plans AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY nutrition_select ON public.nutrition_plans AS PERMISSIVE FOR SELECT TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin() OR (EXISTS ( SELECT 1
+   FROM clients c
+  WHERE ((c.user_id = auth.uid()) AND (c.id = nutrition_plans.client_id))))));
+CREATE POLICY nutrition_update ON public.nutrition_plans AS PERMISSIVE FOR UPDATE TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin())) WITH CHECK (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY profiles_select ON public.profiles AS PERMISSIVE FOR SELECT TO authenticated USING (((id = auth.uid()) OR is_admin()));
+CREATE POLICY profiles_update ON public.profiles AS PERMISSIVE FOR UPDATE TO authenticated USING (((id = auth.uid()) OR is_admin())) WITH CHECK (((id = auth.uid()) OR is_admin()));
+CREATE POLICY programs_delete ON public.programs AS PERMISSIVE FOR DELETE TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY programs_insert ON public.programs AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY programs_select ON public.programs AS PERMISSIVE FOR SELECT TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin() OR (EXISTS ( SELECT 1
+   FROM clients c
+  WHERE ((c.user_id = auth.uid()) AND (c.assigned_program_id = programs.id))))));
+CREATE POLICY programs_update ON public.programs AS PERMISSIVE FOR UPDATE TO authenticated USING (((trainer_id = (auth.uid())::text) OR is_admin())) WITH CHECK (((trainer_id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY trainer_profiles_insert ON public.trainer_profiles AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY trainer_profiles_select ON public.trainer_profiles AS PERMISSIVE FOR SELECT TO authenticated USING (((id = (auth.uid())::text) OR is_admin()));
+CREATE POLICY trainer_profiles_update ON public.trainer_profiles AS PERMISSIVE FOR UPDATE TO authenticated USING (((id = (auth.uid())::text) OR is_admin())) WITH CHECK (((id = (auth.uid())::text) OR is_admin()));
+
+
+
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+CREATE TRIGGER trg_clients_program_ownership BEFORE INSERT OR UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION enforce_client_program_ownership();
+CREATE TRIGGER trg_clients_structural_immutable BEFORE UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION enforce_client_structural_immutability();
+CREATE TRIGGER trg_profiles_role_immutable BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION enforce_profile_role_immutability();
+
+-- PENDING: schema-level grants, default privileges, function ACL completeness and auth schema ownership were not independently captured as DDL.
+-- PENDING: Auth project settings, SMTP/templates, secrets, Auth users/identities and production data are outside this schema baseline.
+COMMIT;

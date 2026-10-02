@@ -17,6 +17,7 @@ import { ClientCycle } from './ClientCycle';
 import { ClientReminders } from './ClientReminders';
 import { ClientHelp } from './ClientHelp';
 import { ClientActivate } from './ClientActivate';
+import { useApp } from '../../context/AppContext';
 
 type Tab = 'hoy' | 'entreno' | 'progreso' | 'nutricion' | 'perfil';
 type Screen =
@@ -40,6 +41,7 @@ interface ClientAppProps {
 }
 
 export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
+  const { activeClient, signOut, supabaseUser, loadRealClientForUser } = useApp();
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash || '';
@@ -118,6 +120,24 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
     'perfil'
   ].includes(currentScreen);
 
+  // Fail closed for an authenticated client identity that is not linked to a public.clients row.
+  // Do not synthesize or write a client record; expose only logout so AuthScreen recovery remains available.
+  if (!activeClient && currentScreen !== 'activate') {
+    return (
+      <main role="alert" aria-live="polite" className="min-h-screen bg-[#101012] text-[#F5F4F0] flex items-center justify-center p-6">
+        <section className="w-full max-w-md rounded-2xl border border-white/10 bg-[#1B1B1F] p-6 text-center">
+          <h1 className="text-xl font-bold">Cuenta pendiente de vinculación</h1>
+          <p className="mt-3 text-sm text-[#A0A0A8]">
+            Tu sesión está autenticada, pero todavía no hay una ficha de cliente asociada. No se mostrarán ni crearán datos hasta que tu entrenador complete la vinculación.
+          </p>
+          <button type="button" onClick={() => void signOut()} className="mt-6 w-full rounded-xl bg-[#D6FF5F] px-4 py-3 font-semibold text-[#101012]">
+            Cerrar sesión y volver al acceso
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className="relative w-full h-full max-w-[430px] mx-auto bg-[#101012] text-[#F5F4F0] flex flex-col overflow-hidden">
       {/* Screen View Container */}
@@ -125,8 +145,13 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
         {currentScreen === 'activate' && (
           <ClientActivate
             onFinishActivation={() => {
-              setActiveTab('hoy');
-              setCurrentScreen('hoy');
+              void (async () => {
+                if (supabaseUser?.id && loadRealClientForUser) {
+                  await loadRealClientForUser(supabaseUser.id);
+                }
+                setActiveTab('hoy');
+                setCurrentScreen('hoy');
+              })();
             }}
             onGoToLogin={() => setCurrentScreen('onboarding')}
           />

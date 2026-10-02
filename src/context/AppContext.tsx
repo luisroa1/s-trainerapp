@@ -358,8 +358,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Get initial session
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+    // 1. Explicitly process Auth callback tokens before reading the initial
+    // session. Some callback URLs contain an app marker before the token
+    // fragment (for example `#activate#access_token=...`).
+    const callbackUrl = new URL(window.location.href);
+    let callbackHash = callbackUrl.hash.startsWith('#')
+      ? callbackUrl.hash.slice(1)
+      : callbackUrl.hash;
+    const accessTokenIndex = callbackHash.indexOf('access_token=');
+    if (accessTokenIndex >= 0) callbackHash = callbackHash.slice(accessTokenIndex);
+    const callbackParams = new URLSearchParams(callbackHash);
+    const accessToken = callbackParams.get('access_token');
+    const refreshToken = callbackParams.get('refresh_token');
+
+    const requestedFlow = callbackUrl.searchParams.get('flow') ||
+      (callbackParams.get('type') === 'recovery'
+        ? 'recovery'
+        : callbackParams.get('type') === 'invite' || callbackUrl.hash.includes('activate')
+          ? 'activate'
+          : null);
+
+    const establishCallbackSession = async () => {
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (!error) {
+          if (requestedFlow) callbackUrl.searchParams.set('flow', requestedFlow);
+          callbackUrl.hash = '';
+          window.history.replaceState(null, '', `${callbackUrl.pathname}${callbackUrl.search}`);
+        }
+      }
+
+      return supabase.auth.getSession();
+    };
+
+    // 2. Get initial session after processing a callback, if present.
+    establishCallbackSession().then(async ({ data: { session }, error }) => {
       if (!isMounted) return;
       if (session?.user) {
         setSupabaseSession(session);
@@ -401,7 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isMounted) setAuthLoading(false);
     });
 
-    // 2. Auth state change listener
+    // 3. Auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return;
       setSupabaseSession(session);
@@ -459,10 +496,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isMounted) setAuthLoading(false);
     });
 
-    // 3. Initial health check & data fetch
+    // 4. Initial health check & data fetch
     refreshFromSupabase();
 
-    // 4. Setup Realtime Subscription
+    // 5. Setup Realtime Subscription
     const channel = supabase
       .channel('strainer-realtime-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, payload => {

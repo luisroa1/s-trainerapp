@@ -1,0 +1,10 @@
+# Local/isolated reconstruction scaffold. Not linked to production.
+# Auth URLs/provider/email values intentionally omitted pending verified configuration.
+project_id = "s-trainerapp-recovery"
+
+[functions.invite-client]
+verify_jwt = true
+
+[functions.activate-client]
+verify_jwt = true
+# These function sources are candidates only; validate in a clean isolated project before deployment.

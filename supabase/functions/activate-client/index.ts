@@ -114,9 +114,12 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
+    const errorMessage = err instanceof Error && err.message
+      ? err.message
+      : 'Error interno del servidor en Edge Function';
     console.error('Error inesperado en activate-client:', err);
     return new Response(
-      JSON.stringify({ error: err.message || 'Error interno del servidor en Edge Function' }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

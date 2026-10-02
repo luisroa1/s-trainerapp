@@ -198,10 +198,17 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
         updateClient(activeClient.id, { status: 'Activo' });
       }
 
-      // Limpiar hash de activación de la URL
-      if (window.location.hash.includes('activate') || window.location.hash.includes('access_token')) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
+      // Remove only the activation marker after success, preserving the session and other URL state.
+      const completedUrl = new URL(window.location.href);
+      const remainingParams = [...completedUrl.searchParams.entries()].filter(
+        ([key, value]) => key !== 'flow' || value !== 'activate',
+      );
+      completedUrl.search = new URLSearchParams(remainingParams).toString();
+      window.history.replaceState(
+        null,
+        '',
+        `${completedUrl.pathname}${completedUrl.search}${completedUrl.hash}`,
+      );
 
       setSuccessMessage('¡Contraseña establecida con éxito! Tu cuenta está activa.');
       setIsLoading(false);

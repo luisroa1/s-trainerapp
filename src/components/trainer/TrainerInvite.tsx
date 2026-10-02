@@ -36,8 +36,10 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
 
     try {
       // Redirección dinámica hacia la pantalla de activación de la app
-      const appOrigin = window.location.origin || 'https://s-trainerapp.ai.studio';
-      const redirectTo = `${appOrigin}/#activate`;
+      const appOrigin = window.location.origin;
+      // Keep the flow marker in the query string. Supabase Auth uses the URL
+      // fragment for its access/refresh tokens after accepting an invitation.
+      const redirectTo = `${appOrigin}/?flow=activate`;
 
       // 1. Invocar la Edge Function 'invite-client' en Supabase
       const { data, error } = await supabase.functions.invoke('invite-client', {

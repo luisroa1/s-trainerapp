@@ -91,7 +91,9 @@ Deno.serve(async (req: Request) => {
       assignedProgramId: rawAssignedProgramId,
       redirectTo: customRedirectTo,
     } = body;
-    const assignedProgramId = rawAssignedProgramId || 'prog-1';
+    const assignedProgramId = typeof rawAssignedProgramId === 'string'
+      ? rawAssignedProgramId.trim()
+      : '';
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return new Response(
@@ -103,6 +105,13 @@ Deno.serve(async (req: Request) => {
     if (!email || typeof email !== 'string' || !email.trim()) {
       return new Response(
         JSON.stringify({ error: 'El correo electrónico es obligatorio.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!assignedProgramId) {
+      return new Response(
+        JSON.stringify({ error: 'Selecciona un programa válido antes de invitar al cliente.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

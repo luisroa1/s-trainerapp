@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
 import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
@@ -60,7 +60,7 @@ interface AppContextType {
   }) => Promise<{ success: boolean; error?: string; message?: string }>;
   signOut: () => Promise<void>;
   syncAllToSupabase: () => Promise<{ success: boolean; error?: string }>;
-  refreshFromSupabase: () => Promise<void>;
+  refreshFromSupabase: (authenticatedUserId?: string, authenticatedRole?: UserRole | null) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -124,6 +124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [];
     }
   });
+  const activeProgramOwnerId = useRef<string | null>(null);
 
   const [nutritionPlans, setNutritionPlans] = useState<Record<string, NutritionPlan>>(() => {
     const saved = localStorage.getItem('strainer_nutrition');
@@ -279,7 +280,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Load and sync from Supabase
-  const refreshFromSupabase = useCallback(async () => {
+  const refreshFromSupabase = useCallback(async (
+    authenticatedUserId = supabaseUser?.id,
+    authenticatedRole = userRole
+  ) => {
     try {
       const health = await supabaseDb.testConnection();
       if (!health.connected) {
@@ -308,10 +312,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // Fetch Programs
-      const programsRes = await supabaseDb.getPrograms();
-      if (programsRes.data) {
-        setPrograms(programsRes.data);
+      // Trainers load only their own programs. Clients load only programs
+      // belonging to the trainer linked to their client row.
+      let programOwnerId = authenticatedUserId || '';
+      if (authenticatedRole === 'client' && authenticatedUserId) {
+        const { data: clientLink, error: clientLinkError } = await supabase
+          .from('clients')
+          .select('trainer_id')
+          .eq('user_id', authenticatedUserId)
+          .maybeSingle();
+        programOwnerId = clientLinkError ? '' : (clientLink?.trainer_id || '');
+      }
+
+      activeProgramOwnerId.current = programOwnerId || null;
+      if (programOwnerId) {
+        const programsRes = await supabaseDb.getPrograms(programOwnerId);
+        setPrograms(programsRes.data || []);
+      } else {
+        setPrograms([]);
       }
 
       // Fetch Nutrition
@@ -430,6 +448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else if (role === 'client') {
               await loadRealClientForUser(session.user.id);
             }
+            await refreshFromSupabase(session.user.id, role);
           }
         } catch (e) {
           console.warn('Error fetching initial profile:', e);
@@ -490,6 +509,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUserRole(null);
         setTrainer(INITIAL_TRAINER);
         setRealClient(null);
+        activeProgramOwnerId.current = null;
+        setPrograms([]);
         localStorage.removeItem('strainer_user_role');
         localStorage.removeItem('strainer_trainer');
       }
@@ -521,7 +542,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const updated = payload.new?.data as Program;
+          const rowOwnerId = payload.new?.trainer_id;
+          if (!rowOwnerId || rowOwnerId !== activeProgramOwnerId.current) return;
+          const updated = { ...(payload.new?.data as Program), trainerId: rowOwnerId };
           if (updated && updated.id) {
             setPrograms(prev => {
               const idx = prev.findIndex(p => p.id === updated.id);
@@ -604,7 +627,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      await refreshFromSupabase();
+      await refreshFromSupabase(data.user.id, role);
       setAuthLoading(false);
       return { success: true, role };
     } catch (err: any) {

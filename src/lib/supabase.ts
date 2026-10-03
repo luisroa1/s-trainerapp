@@ -117,16 +117,20 @@ export const supabaseDb = {
   },
 
   // Programs
-  async getPrograms(): Promise<{ data: Program[] | null; error: any }> {
+  async getPrograms(trainerId: string): Promise<{ data: Program[] | null; error: any }> {
     try {
       const { data, error } = await supabase
         .from('programs')
-        .select('*');
+        .select('*')
+        .eq('trainer_id', trainerId);
       
       if (error) return { data: null, error };
       if (!data || data.length === 0) return { data: [], error: null };
 
-      const programs = data.map(r => (r.data?.id ? r.data : { ...r, id: r.id })) as Program[];
+      const programs = data.map(r => ({
+        ...(r.data?.id ? r.data : { ...r, id: r.id }),
+        trainerId: r.trainer_id,
+      })) as Program[];
       return { data: programs, error: null };
     } catch (err) {
       return { data: null, error: err };

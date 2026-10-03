@@ -103,3 +103,20 @@ test('invite-client validates redirect before sending the invitation', () => {
   assert.ok(source.indexOf('resolveAuthorizedRedirect(authorizedAppUrl, customRedirectTo)') < source.indexOf('adminClient.auth.admin.inviteUserByEmail('));
   assert.match(source, /La URL de redirección de la invitación no está autorizada para este entorno\./);
 });
+
+test('trainer invitation only selects owned programs and fails closed without one', () => {
+  const invite = readFileSync(new URL('../src/components/trainer/TrainerInvite.tsx', import.meta.url), 'utf8');
+  const db = readFileSync(new URL('../src/lib/supabase.ts', import.meta.url), 'utf8');
+  const context = readFileSync(new URL('../src/context/AppContext.tsx', import.meta.url), 'utf8');
+  const edgeFunction = readFileSync(new URL('../supabase/functions/invite-client/index.ts', import.meta.url), 'utf8');
+
+  assert.match(db, /getPrograms\(trainerId: string\)[\s\S]*?\.eq\('trainer_id', trainerId\)/);
+  assert.match(context, /supabaseDb\.getPrograms\(programOwnerId\)/);
+  assert.match(invite, /programs\.filter\(program => program\.trainerId === supabaseUser\?\.id\)/);
+  assert.match(invite, /No tienes programas propios disponibles/);
+  assert.match(invite, /!trainerPrograms\.some\(program => program\.id === assignedProgram\)/);
+  assert.doesNotMatch(edgeFunction, /rawAssignedProgramId \|\| 'prog-1'/);
+  assert.match(edgeFunction, /if \(!assignedProgramId\)/);
+  assert.match(edgeFunction, /programRow\.trainer_id !== callerUser\.id/);
+  assert.ok(edgeFunction.indexOf('programRow.trainer_id !== callerUser.id') < edgeFunction.indexOf('adminClient.auth.admin.inviteUserByEmail('));
+});

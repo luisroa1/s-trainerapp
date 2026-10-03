@@ -36,6 +36,7 @@ export interface ProgramWeekVolume {
 
 export interface Program {
   id: string;
+  trainerId?: string;
   name: string;
   type: string; // Hipertrofia, Fuerza, Pérdida de grasa, Recomposición, etc.
   durationWeeks: number;

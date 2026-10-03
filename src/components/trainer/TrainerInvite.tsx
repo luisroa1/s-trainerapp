@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Send, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -11,15 +11,22 @@ interface TrainerInviteProps {
 
 export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess }) => {
   const { programs, addClient, appName, supabaseUser } = useApp();
+  const trainerPrograms = programs.filter(program => program.trainerId === supabaseUser?.id);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [objective, setObjective] = useState('Pérdida de grasa');
   const [startDate, setStartDate] = useState('2026-10-01');
-  const [assignedProgram, setAssignedProgram] = useState(programs[0]?.id || '');
+  const [assignedProgram, setAssignedProgram] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    setAssignedProgram(current => trainerPrograms.some(program => program.id === current)
+      ? current
+      : (trainerPrograms[0]?.id || ''));
+  }, [programs, supabaseUser?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +36,12 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
     }
     if (!email.trim()) {
       setErrorMessage('Por favor introduce el email del cliente.');
+      return;
+    }
+    if (!trainerPrograms.some(program => program.id === assignedProgram)) {
+      setErrorMessage(trainerPrograms.length
+        ? 'Selecciona un programa propio válido antes de enviar la invitación.'
+        : 'No tienes programas propios disponibles. Crea un programa antes de invitar clientes.');
       return;
     }
 
@@ -219,9 +232,11 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
             <select
               value={assignedProgram}
               onChange={e => setAssignedProgram(e.target.value)}
+              disabled={trainerPrograms.length === 0}
               className="w-full px-4 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
             >
-              {programs.map(p => (
+              {trainerPrograms.length === 0 && <option value="">No tienes programas propios</option>}
+              {trainerPrograms.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({p.durationWeeks} semanas)
                 </option>
@@ -232,6 +247,12 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
           <div className="p-3 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#8E8E94]">
             Tu cliente recibirá una invitación para acceder a {appName} y activar su cuenta con estos datos.
           </div>
+
+          {trainerPrograms.length === 0 && (
+            <div role="status" className="text-xs text-amber-300">
+              No puedes invitar todavía: crea un programa asociado a tu cuenta y vuelve a intentarlo.
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-3 pt-4">
             <button
@@ -244,7 +265,7 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !trainerPrograms.some(program => program.id === assignedProgram)}
               style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
               className="px-7 py-3 rounded-full font-bold text-xs shadow-md flex items-center gap-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
             >

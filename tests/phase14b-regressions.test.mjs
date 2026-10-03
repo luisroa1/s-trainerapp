@@ -4,6 +4,17 @@ import { readFileSync } from 'node:fs';
 import { buildAppCallbackUrl } from '../src/lib/appCallbackUrl.mjs';
 import { clearSuccessfulActivationFlow } from '../src/lib/activationUrl.mjs';
 import { resolveAuthorizedRedirect } from '../supabase/functions/_shared/authorizedRedirect.mjs';
+import { isPasswordRecoveryRoute } from '../src/lib/passwordRecoveryRoute.mjs';
+
+test('recovery callback survives AppContext consuming the Auth fragment', () => {
+  assert.equal(isPasswordRecoveryRoute({ search: '?flow=recovery', hash: '' }), true);
+  assert.equal(isPasswordRecoveryRoute({ search: '?flow=activate', hash: '' }), false);
+  assert.equal(isPasswordRecoveryRoute({ search: '', hash: '#access_token=synthetic&type=recovery' }), true);
+  assert.equal(isPasswordRecoveryRoute({ search: '?code=synthetic', hash: '' }), true);
+
+  const source = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(source, /isPasswordRecoveryRoute\(window\.location\)/);
+});
 
 test('Auth callback uses the GitHub Pages project base path and activation query', () => {
   assert.equal(

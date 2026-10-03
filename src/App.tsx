@@ -6,6 +6,7 @@ import { AdminApp } from './components/common/AdminApp';
 import { AuthScreen } from './components/common/AuthScreen';
 import { Loader2 } from 'lucide-react';
 import { PasswordRecovery } from './components/common/PasswordRecovery';
+import { isPasswordRecoveryRoute } from './lib/passwordRecoveryRoute.mjs';
 
 const AuthenticatedApp: React.FC = () => {
   const { supabaseUser, userRole, authLoading } = useApp();
@@ -20,8 +21,7 @@ const AuthenticatedApp: React.FC = () => {
     );
   }
 
-  const recoveryRequested = 
-    (typeof window !== 'undefined' && (new URLSearchParams(window.location.search).has('code') || window.location.hash.includes('type=recovery')));
+  const recoveryRequested = typeof window !== 'undefined' && isPasswordRecoveryRoute(window.location);
   
   if (recoveryRequested && supabaseUser) return <PasswordRecovery />;
   if (!supabaseUser || !userRole) return <AuthScreen />;

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Send, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
+import { getAppCallbackUrl } from '../../lib/appUrl';
 
 interface TrainerInviteProps {
   onBack: () => void;
@@ -36,10 +37,9 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
 
     try {
       // Redirección dinámica hacia la pantalla de activación de la app
-      const appOrigin = window.location.origin;
       // Keep the flow marker in the query string. Supabase Auth uses the URL
       // fragment for its access/refresh tokens after accepting an invitation.
-      const redirectTo = `${appOrigin}/?flow=activate`;
+      const redirectTo = getAppCallbackUrl({ flow: 'activate' });
 
       // 1. Invocar la Edge Function 'invite-client' en Supabase
       const { data, error } = await supabase.functions.invoke('invite-client', {

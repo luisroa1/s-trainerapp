@@ -1,8 +1,6 @@
-name: Deploy to GitHub Pages
+name: Deploy S-TRAINER staging to GitHub Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +14,9 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: staging
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,11 +29,19 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Type-check
+        run: bun run lint
+
+      - name: Regression tests
+        run: bun run test
+
       - name: Build
         env:
           GITHUB_PAGES: 'true'
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_TARGET: staging
+          VITE_BASE_PATH: /s-trainerapp/
+          VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_PUBLISHABLE_KEY }}
         run: bun run build
 
       - name: Upload build artifact

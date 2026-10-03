@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
+import { getAppCallbackUrl } from '../../lib/appUrl';
 import heroTrainingPhoto from '../../assets/hero-training.jpg';
 
 /* Marca S-Trainer: cinta doblada en forma de "S", gradiente azul-cian,
@@ -42,7 +43,7 @@ export const AuthScreen: React.FC = () => {
     }
     setRecoveryLoading(true);
     const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: window.location.origin,
+      redirectTo: getAppCallbackUrl(),
     });
     setRecoveryLoading(false);
     if (recoveryError) {

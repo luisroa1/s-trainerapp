@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { supabase, supabaseDb } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
+import { clearSuccessfulActivationFlow } from '../../lib/activationUrl.mjs';
 
 interface ClientActivateProps {
   onFinishActivation: () => void;
@@ -198,16 +199,10 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
         updateClient(activeClient.id, { status: 'Activo' });
       }
 
-      // Remove only the activation marker after success, preserving the session and other URL state.
-      const completedUrl = new URL(window.location.href);
-      const remainingParams = [...completedUrl.searchParams.entries()].filter(
-        ([key, value]) => key !== 'flow' || value !== 'activate',
-      );
-      completedUrl.search = new URLSearchParams(remainingParams).toString();
       window.history.replaceState(
         null,
         '',
-        `${completedUrl.pathname}${completedUrl.search}${completedUrl.hash}`,
+        clearSuccessfulActivationFlow(window.location.href),
       );
 
       setSuccessMessage('¡Contraseña establecida con éxito! Tu cuenta está activa.');

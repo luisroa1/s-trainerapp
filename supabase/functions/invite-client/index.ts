@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { normalizeAuthorizedBaseUrl, resolveAuthorizedRedirect } from '../_shared/authorizedRedirect.mjs';
 
 // Encabezados CORS para permitir llamadas desde el cliente web
 const corsHeaders = {
@@ -170,14 +171,34 @@ Deno.serve(async (req: Request) => {
 
     // 6. Configurar la URL de redirección a la página de activación
     const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL');
-    if (!customRedirectTo && !appUrl) {
+    if (!appUrl) {
       console.error('Faltan APP_URL o SITE_URL para construir el redirect de invitación');
       return new Response(
         JSON.stringify({ error: 'Configuración incompleta: falta APP_URL o SITE_URL.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    const finalRedirectTo = customRedirectTo || new URL('/?flow=activate', appUrl).toString();
+    let authorizedAppUrl: string;
+    try {
+      authorizedAppUrl = normalizeAuthorizedBaseUrl(appUrl);
+    } catch (configurationError) {
+      console.error('APP_URL/SITE_URL no es una base de aplicación válida:', configurationError);
+      return new Response(
+        JSON.stringify({ error: 'Configuración incompleta: APP_URL o SITE_URL no es válida.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    let finalRedirectTo: string;
+    try {
+      finalRedirectTo = resolveAuthorizedRedirect(authorizedAppUrl, customRedirectTo);
+    } catch (redirectError) {
+      console.warn('Se rechazó un redirect de invitación no autorizado:', redirectError);
+      return new Response(
+        JSON.stringify({ error: 'La URL de redirección de la invitación no está autorizada para este entorno.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // 7. Enviar la invitación mediante supabase.auth.admin.inviteUserByEmail
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(

@@ -1,11 +1,51 @@
 import { createClient } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
 
-export const SUPABASE_URL = 
-  import.meta.env.VITE_SUPABASE_URL || 'https://rfxyisqvrukslnlgzzek.supabase.co';
+const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
+const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+const configuredPublishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
-export const SUPABASE_ANON_KEY = 
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2V9OnpXFWsG7LSenErU0Zg_BuwhehAD';
+if (!['local', 'staging', 'production'].includes(appTarget || '')) {
+  throw new Error('Falta VITE_APP_TARGET; debe ser local, staging o production.');
+}
+if (appTarget === 'production') {
+  throw new Error('VITE_APP_TARGET=production está bloqueado hasta aprobar y fijar una URL Supabase permitida para producción.');
+}
+
+if (!configuredSupabaseUrl || !configuredPublishableKey) {
+  throw new Error('Falta VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY. S-TRAINER no iniciará Supabase sin configuración explícita.');
+}
+if (configuredPublishableKey.startsWith('REPLACE_WITH_')) {
+  throw new Error('VITE_SUPABASE_ANON_KEY no está configurada con la clave publicable del entorno.');
+}
+
+let parsedSupabaseUrl: URL;
+try {
+  parsedSupabaseUrl = new URL(configuredSupabaseUrl);
+} catch {
+  throw new Error('VITE_SUPABASE_URL no es una URL válida.');
+}
+
+const isLocalTarget = appTarget === 'local';
+const isLoopback = ['localhost', '127.0.0.1'].includes(parsedSupabaseUrl.hostname);
+if (parsedSupabaseUrl.protocol !== 'https:' && !(isLocalTarget && parsedSupabaseUrl.protocol === 'http:' && isLoopback)) {
+  throw new Error('VITE_SUPABASE_URL debe usar HTTPS, salvo Supabase local en localhost.');
+}
+
+if (parsedSupabaseUrl.pathname !== '/' || parsedSupabaseUrl.search || parsedSupabaseUrl.hash) {
+  throw new Error('VITE_SUPABASE_URL debe ser el origen del proyecto, sin path, query ni fragmento.');
+}
+
+const STAGING_PROJECT_REF = 'qgppeyplrrgiedsvsvst';
+if (appTarget === 'staging' && parsedSupabaseUrl.hostname !== `${STAGING_PROJECT_REF}.supabase.co`) {
+  throw new Error(`Configuración staging rechazada: solo se permite el proyecto Supabase aislado ${STAGING_PROJECT_REF}.`);
+}
+
+export const SUPABASE_URL = parsedSupabaseUrl.origin;
+export const SUPABASE_PROJECT_REF = parsedSupabaseUrl.hostname.endsWith('.supabase.co')
+  ? parsedSupabaseUrl.hostname.slice(0, -'.supabase.co'.length)
+  : null;
+export const SUPABASE_ANON_KEY = configuredPublishableKey;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -14,115 +54,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: true,
   },
 });
-
-/**
- * SQL script for Supabase SQL Editor to create tables with Realtime enabled.
- */
-export const SUPABASE_SCHEMA_SQL = `-- S-TRAINER APP: Esquema oficial de base de datos para Supabase
--- Ejecuta este script en Supabase > SQL Editor > New Query > Run
-
--- 1. Tabla de Perfiles vinculada a Auth
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'client' CHECK (role IN ('trainer', 'client', 'admin')),
-  full_name TEXT,
-  phone TEXT,
-  avatar_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 2. Tabla de Clientes
-CREATE TABLE IF NOT EXISTS public.clients (
-  id TEXT PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  trainer_id TEXT DEFAULT 'trn-1',
-  name TEXT NOT NULL,
-  email TEXT,
-  phone TEXT,
-  sex TEXT DEFAULT 'Hombre',
-  height TEXT,
-  objective TEXT,
-  status TEXT DEFAULT 'Activo',
-  current_weight NUMERIC,
-  adherence_percentage NUMERIC DEFAULT 100,
-  assigned_program_id TEXT DEFAULT 'prog-1',
-  data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 3. Tabla de Programas de Entrenamiento
-CREATE TABLE IF NOT EXISTS public.programs (
-  id TEXT PRIMARY KEY,
-  trainer_id TEXT DEFAULT 'trn-1',
-  name TEXT NOT NULL,
-  type TEXT,
-  level TEXT,
-  duration_weeks INT DEFAULT 4,
-  days_per_week INT DEFAULT 4,
-  data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 4. Tabla de Planes de Nutrición
-CREATE TABLE IF NOT EXISTS public.nutrition_plans (
-  id TEXT PRIMARY KEY,
-  client_id TEXT NOT NULL,
-  trainer_id TEXT DEFAULT 'trn-1',
-  data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 5. Tabla de Perfil del Entrenador
-CREATE TABLE IF NOT EXISTS public.trainer_profiles (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  initials TEXT,
-  role TEXT DEFAULT 'Entrenador',
-  avatar_url TEXT,
-  coupon_code TEXT,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Habilitar RLS (Row Level Security)
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.programs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.nutrition_plans ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.trainer_profiles ENABLE ROW LEVEL SECURITY;
-
--- Políticas permisivas para desarrollo y funcionamiento continuo
-DROP POLICY IF EXISTS "Permitir lectura y escritura general a profiles" ON public.profiles;
-CREATE POLICY "Permitir lectura y escritura general a profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Permitir lectura y escritura general a clients" ON public.clients;
-CREATE POLICY "Permitir lectura y escritura general a clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Permitir lectura y escritura general a programs" ON public.programs;
-CREATE POLICY "Permitir lectura y escritura general a programs" ON public.programs FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Permitir lectura y escritura general a nutrition_plans" ON public.nutrition_plans;
-CREATE POLICY "Permitir lectura y escritura general a nutrition_plans" ON public.nutrition_plans FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Permitir lectura y escritura general a trainer_profiles" ON public.trainer_profiles;
-CREATE POLICY "Permitir lectura y escritura general a trainer_profiles" ON public.trainer_profiles FOR ALL USING (true) WITH CHECK (true);
-
--- Activar publicación en tiempo real (Supabase Realtime)
-BEGIN;
-  DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE 
-    public.profiles, 
-    public.clients, 
-    public.programs, 
-    public.nutrition_plans, 
-    public.trainer_profiles;
-COMMIT;
-`;
 
 // Helper: Format client for database storage
 export const serializeClientToDb = (client: ClientData, ownerId?: string) => {

@@ -2,21 +2,17 @@ import React, { useState } from 'react';
 import { 
   X, 
   Database, 
-  Check, 
-  Copy, 
-  ExternalLink, 
   RefreshCw, 
   ShieldCheck, 
   User, 
   Briefcase, 
   AlertCircle, 
   CheckCircle2,
-  Terminal,
   LogOut,
   Sparkles
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SCHEMA_SQL } from '../../lib/supabase';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
 import { UserRole } from '../../types';
 
 interface SupabaseSyncModalProps {
@@ -38,31 +34,23 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
     syncAllToSupabase,
     refreshFromSupabase
   } = useApp();
+  const supabaseProjectHost = new URL(SUPABASE_URL).host;
 
-  const [activeTab, setActiveTab] = useState<'status' | 'sql' | 'auth'>('status');
-  const [copiedSql, setCopiedSql] = useState(false);
+  const [activeTab, setActiveTab] = useState<'status' | 'auth'>('status');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Quick auth states
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authRole, setAuthRole] = useState<UserRole>('trainer');
-  const [email, setEmail] = useState('entrenador.test@strainerapp.dev');
-  const [password, setPassword] = useState('Password123!');
-  const [fullName, setFullName] = useState('Entrenador Principal');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
   if (!isOpen) return null;
-
-  const handleCopySql = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
-      setCopiedSql(true);
-      setTimeout(() => setCopiedSql(false), 2500);
-    }
-  };
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
@@ -135,7 +123,7 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
               </span>
             </h2>
             <p className="text-xs text-[#8E8E94]">
-              Proyecto: <span className="text-[#F5F4F0] font-mono font-medium">rfxyisqvrukslnlgzzek.supabase.co</span>
+              Proyecto: <span className="text-[#F5F4F0] font-mono font-medium">{supabaseProjectHost}</span>
             </p>
           </div>
         </div>
@@ -149,14 +137,6 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
             }`}
           >
             Estado & Sincronización
-          </button>
-          <button
-            onClick={() => setActiveTab('sql')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-              activeTab === 'sql' ? 'bg-[var(--accent-color,#CFFF5C)] text-[#101012]' : 'text-[#8E8E94] hover:text-[#F5F4F0]'
-            }`}
-          >
-            Script SQL (Tablas)
           </button>
           <button
             onClick={() => setActiveTab('auth')}
@@ -253,58 +233,7 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
           </div>
         )}
 
-        {/* TAB 2: SQL SCHEMA SCRIPT */}
-        {activeTab === 'sql' && (
-          <div className="space-y-4">
-            <div className="p-3 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#8E8E94]">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-[#F5F4F0]">¿Cómo crear las tablas en tu proyecto de Supabase?</span>
-                <button
-                  onClick={() => window.open('https://supabase.com/dashboard/project/rfxyisqvrukslnlgzzek/sql/new', '_blank')}
-                  className="text-[10px] text-[var(--accent-color,#CFFF5C)] hover:underline flex items-center gap-1 font-semibold"
-                >
-                  <span>Abrir Supabase SQL Editor</span>
-                  <ExternalLink className="w-3 h-3" />
-                </button>
-              </div>
-              <p className="text-[11px] leading-relaxed">
-                1. Haz clic en "Copiar Script SQL" abajo.<br />
-                2. En tu panel de Supabase ve a <strong>SQL Editor</strong> &gt; <strong>New Query</strong>.<br />
-                3. Pega el script y pulsa <strong>RUN</strong>. ¡Creará las tablas <code className="text-[#CFFF5C]">clients</code>, <code className="text-[#CFFF5C]">programs</code>, <code className="text-[#CFFF5C]">nutrition_plans</code> y activará el Realtime!
-              </p>
-            </div>
-
-            <div className="relative">
-              <div className="flex items-center justify-between pb-2">
-                <span className="text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider">
-                  Script SQL Completo (PostgreSQL + RLS + Realtime)
-                </span>
-                <button
-                  onClick={handleCopySql}
-                  className="text-xs font-bold text-[var(--accent-color,#CFFF5C)] flex items-center gap-1.5 hover:underline cursor-pointer"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-[#CFFF5C]" />
-                      <span>¡Copiado al portapapeles!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copiar Script SQL</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <pre className="p-4 rounded-xl bg-[#101012] border border-[#2A2A2F] text-[11px] font-mono text-[#8E8E94] max-h-[220px] overflow-y-auto whitespace-pre-wrap selection:bg-[#CFFF5C] selection:text-[#101012]">
-                {SUPABASE_SCHEMA_SQL}
-              </pre>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: AUTH TEST */}
+        {/* TAB 2: AUTH TEST */}
         {activeTab === 'auth' && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-1 bg-[#1B1B1F] border border-[#2A2A2F] rounded-lg">

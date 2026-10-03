@@ -2,8 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
-
-const STAGING_PROJECT_REF = 'qgppeyplrrgiedsvsvst';
+import {validateSupabaseTarget} from './src/lib/supabaseTarget.mjs';
 
 export default defineConfig(({ mode }) => {
     const fileEnv = loadEnv(mode, process.cwd(), '');
@@ -12,28 +11,7 @@ export default defineConfig(({ mode }) => {
     const supabaseUrl = getEnv('VITE_SUPABASE_URL')?.trim();
     const publishableKey = getEnv('VITE_SUPABASE_ANON_KEY')?.trim();
 
-    if (!['local', 'staging', 'production'].includes(appTarget || '')) {
-        throw new Error('Falta VITE_APP_TARGET; debe ser local, staging o production.');
-    }
-    if (appTarget === 'production') {
-        throw new Error('Build cancelado: el target production requiere aprobar y fijar antes una URL Supabase permitida.');
-    }
-    if (!supabaseUrl || !publishableKey || publishableKey.startsWith('REPLACE_WITH_')) {
-        throw new Error('Build cancelado: configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY explícitamente.');
-    }
-
-    let parsedSupabaseUrl: URL;
-    try {
-        parsedSupabaseUrl = new URL(supabaseUrl);
-    } catch {
-        throw new Error('Build cancelado: VITE_SUPABASE_URL no es una URL válida.');
-    }
-    if (appTarget === 'staging' && parsedSupabaseUrl.hostname !== `${STAGING_PROJECT_REF}.supabase.co`) {
-        throw new Error(`Build cancelado: staging solo puede usar ${STAGING_PROJECT_REF}.supabase.co.`);
-    }
-    if (parsedSupabaseUrl.pathname !== '/' || parsedSupabaseUrl.search || parsedSupabaseUrl.hash) {
-        throw new Error('Build cancelado: VITE_SUPABASE_URL debe ser el origen del proyecto, sin path/query/hash.');
-    }
+    validateSupabaseTarget({appTarget, supabaseUrl, publishableKey});
 
     const requestedBasePath = getEnv('VITE_BASE_PATH')?.trim();
     const basePath = requestedBasePath || (process.env.GITHUB_PAGES === 'true' ? '/s-trainerapp/' : '/');

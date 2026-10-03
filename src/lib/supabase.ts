@@ -1,51 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
+import { validateSupabaseTarget } from './supabaseTarget.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const configuredPublishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+const validatedTarget = validateSupabaseTarget({
+  appTarget,
+  supabaseUrl: configuredSupabaseUrl,
+  publishableKey: configuredPublishableKey,
+});
 
-if (!['local', 'staging', 'production'].includes(appTarget || '')) {
-  throw new Error('Falta VITE_APP_TARGET; debe ser local, staging o production.');
-}
-if (appTarget === 'production') {
-  throw new Error('VITE_APP_TARGET=production está bloqueado hasta aprobar y fijar una URL Supabase permitida para producción.');
-}
-
-if (!configuredSupabaseUrl || !configuredPublishableKey) {
-  throw new Error('Falta VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY. S-TRAINER no iniciará Supabase sin configuración explícita.');
-}
-if (configuredPublishableKey.startsWith('REPLACE_WITH_')) {
-  throw new Error('VITE_SUPABASE_ANON_KEY no está configurada con la clave publicable del entorno.');
-}
-
-let parsedSupabaseUrl: URL;
-try {
-  parsedSupabaseUrl = new URL(configuredSupabaseUrl);
-} catch {
-  throw new Error('VITE_SUPABASE_URL no es una URL válida.');
-}
-
-const isLocalTarget = appTarget === 'local';
-const isLoopback = ['localhost', '127.0.0.1'].includes(parsedSupabaseUrl.hostname);
-if (parsedSupabaseUrl.protocol !== 'https:' && !(isLocalTarget && parsedSupabaseUrl.protocol === 'http:' && isLoopback)) {
-  throw new Error('VITE_SUPABASE_URL debe usar HTTPS, salvo Supabase local en localhost.');
-}
-
-if (parsedSupabaseUrl.pathname !== '/' || parsedSupabaseUrl.search || parsedSupabaseUrl.hash) {
-  throw new Error('VITE_SUPABASE_URL debe ser el origen del proyecto, sin path, query ni fragmento.');
-}
-
-const STAGING_PROJECT_REF = 'qgppeyplrrgiedsvsvst';
-if (appTarget === 'staging' && parsedSupabaseUrl.hostname !== `${STAGING_PROJECT_REF}.supabase.co`) {
-  throw new Error(`Configuración staging rechazada: solo se permite el proyecto Supabase aislado ${STAGING_PROJECT_REF}.`);
-}
-
-export const SUPABASE_URL = parsedSupabaseUrl.origin;
-export const SUPABASE_PROJECT_REF = parsedSupabaseUrl.hostname.endsWith('.supabase.co')
-  ? parsedSupabaseUrl.hostname.slice(0, -'.supabase.co'.length)
-  : null;
-export const SUPABASE_ANON_KEY = configuredPublishableKey;
+export const SUPABASE_URL = validatedTarget.supabaseUrl;
+export const SUPABASE_PROJECT_REF = validatedTarget.projectRef;
+export const SUPABASE_ANON_KEY = validatedTarget.publishableKey;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

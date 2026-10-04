@@ -1,47 +1,107 @@
-import React from 'react';
-import { LogOut, Shield, UserRound } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ChevronRight, ClipboardList, Dumbbell, LayoutDashboard, LoaderCircle, LogOut, Search, Settings, ShieldCheck, Users, Utensils } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
+import { canEnterAdmin, fetchAdminReadModel, getAdminNavigationTarget, searchAdminDirectory } from '../../lib/adminReadModel.mjs';
+
+type Section = 'home' | 'trainers' | 'clients' | 'programs' | 'nutrition' | 'audit' | 'settings';
+type AdminTrainer = { id: string; name: string; email: string; initials: string; avatarUrl: string; createdAt: string | null; clients: any[]; programs: any[] };
+type AdminClient = { id: string; name: string; email: string; phone?: string; status?: string; objective?: string; assigned_program_id?: string | null; current_weight?: number | null; created_at?: string | null; user_id?: string | null; trainer: AdminTrainer | null; program: any | null; [key: string]: any };
+type AdminProgram = { id: string; name: string; type?: string; level?: string; days_per_week?: number | null; trainer: AdminTrainer | null; clients: AdminClient[]; [key: string]: any };
+type AdminNutritionPlan = { id: string; client: AdminClient | null; trainer: AdminTrainer | null; updated_at?: string | null; [key: string]: any };
+type ReadModel = { trainers: AdminTrainer[]; clients: AdminClient[]; programs: AdminProgram[]; nutritionPlans: AdminNutritionPlan[] };
+const EMPTY_MODEL: ReadModel = { trainers: [], clients: [], programs: [], nutritionPlans: [] };
+const NAV: { id: Section; label: string; icon: React.ElementType; available: boolean }[] = [
+  { id: 'home', label: 'Inicio', icon: LayoutDashboard, available: true },
+  { id: 'trainers', label: 'Trainers', icon: ShieldCheck, available: true },
+  { id: 'clients', label: 'Clients', icon: Users, available: true },
+  { id: 'programs', label: 'Programs', icon: Dumbbell, available: true },
+  { id: 'nutrition', label: 'Nutrition', icon: Utensils, available: true },
+  { id: 'audit', label: 'Auditoría', icon: ClipboardList, available: false },
+  { id: 'settings', label: 'Configuración', icon: Settings, available: false },
+];
+const fmtDate = (value?: string | null) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('es', { dateStyle: 'medium' }).format(date);
+};
 
 export const AdminApp: React.FC = () => {
-  const { trainer, clients, signOut } = useApp();
+  const { userRole, signOut } = useApp();
+  const [section, setSection] = useState<Section>('home');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [model, setModel] = useState<ReadModel>(EMPTY_MODEL);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
-  return (
-    <div className="min-h-screen bg-[#101012] text-[#F5F4F0] p-6 md:p-10">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <div className="flex items-center gap-2 text-[#FFD34D] text-xs font-extrabold uppercase tracking-widest">
-              <Shield className="w-4 h-4" /> Administrador
-            </div>
-            <h1 className="text-3xl font-extrabold mt-2">S-TRAINER</h1>
-            <p className="text-sm text-[#8E8E94] mt-1">Base administrativa del MVP.</p>
-          </div>
-          <button onClick={() => signOut()} className="px-4 py-2 rounded-xl border border-[#2A2A2F] text-sm font-bold flex items-center gap-2 cursor-pointer hover:bg-[#1B1B1F]">
-            <LogOut className="w-4 h-4" /> Salir
-          </button>
-        </header>
+  const load = useCallback(async () => {
+    setStatus('loading');
+    setError('');
+    try {
+      setModel(await fetchAdminReadModel(supabase) as ReadModel);
+      setStatus('ready');
+    } catch (cause) {
+      setModel(EMPTY_MODEL);
+      setError(cause instanceof Error ? cause.message : 'No se pudieron cargar los datos persistidos.');
+      setStatus('error');
+    }
+  }, []);
+  useEffect(() => { if (canEnterAdmin(userRole)) void load(); }, [userRole, load]);
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <section className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5">
-            <div className="text-xs uppercase tracking-widest text-[#8E8E94] font-bold mb-3">Entrenador</div>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-[#1B1B1F] flex items-center justify-center">
-                <UserRound className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="font-bold">{trainer.name || 'No cargado'}</div>
-                <div className="text-xs text-[#8E8E94]">{trainer.email}</div>
-              </div>
-            </div>
-          </section>
+  const searchResults = useMemo(() => searchAdminDirectory(model, search) as { trainers: AdminTrainer[]; clients: AdminClient[] }, [model, search]);
+  const navigate = (destination: string, id: string | null = null) => {
+    const target = getAdminNavigationTarget(destination, id);
+    setSection(target.section as Section);
+    setSelectedId(target.selectedId);
+    setSearch('');
+  };
+  const openTrainer = (id: string) => navigate('trainer', id);
+  const openClient = (id: string) => navigate('client', id);
+  const trainer = section === 'trainers' && selectedId ? model.trainers.find(item => item.id === selectedId) : null;
+  const client = section === 'clients' && selectedId ? model.clients.find(item => item.id === selectedId) : null;
 
-          <section className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5">
-            <div className="text-xs uppercase tracking-widest text-[#8E8E94] font-bold mb-3">Clientes visibles</div>
-            <div className="text-3xl font-extrabold">{clients.length}</div>
-            <div className="text-xs text-[#8E8E94] mt-1">Gestión administrativa del entrenador y sus clientes.</div>
-          </section>
-        </div>
-      </div>
-    </div>
-  );
+  if (!canEnterAdmin(userRole)) return <main className="grid min-h-screen place-items-center bg-[#080D16] p-6 text-center text-slate-200"><div><ShieldCheck className="mx-auto mb-3 h-8 w-8 text-rose-400" /><h1 className="text-xl font-semibold">Acceso administrativo requerido</h1><p className="mt-2 text-sm text-slate-400">Esta vista solo está disponible para una cuenta Admin.</p></div></main>;
+
+  const loadState = () => status === 'loading'
+    ? <div role="status" className="flex min-h-64 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="h-5 w-5 animate-spin text-sky-400" />Consultando datos persistidos de Supabase…</div>
+    : status === 'error'
+      ? <div className="rounded-xl border border-rose-900/70 bg-rose-950/30 p-6"><p role="alert" className="text-sm text-rose-200">{error}</p><button onClick={() => void load()} className="mt-4 rounded-lg border border-rose-800 px-4 py-2 text-sm font-semibold text-rose-100">Reintentar</button></div>
+      : null;
+
+  const title = NAV.find(item => item.id === section)?.label || 'Admin';
+  let content: React.ReactNode;
+  if (section === 'home') {
+    content = <><Heading eyebrow="Control plane · Vista global" title="Estado de la plataforma" detail="Resumen de registros persistidos. Solo se muestran cifras consultadas correctamente desde Supabase." />{loadState() || <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[['Trainers', model.trainers.length, 'Perfiles con role=trainer', 'trainers'], ['Clients', model.clients.length, 'Registros de clientes', 'clients'], ['Programs', model.programs.length, 'Programas persistidos', 'programs'], ['Nutrition plans', model.nutritionPlans.length, 'Planes persistidos', 'nutrition']].map(([label, value, detail, target]) => <button key={String(label)} onClick={() => navigate(String(target))} className="rounded-xl border border-slate-800 bg-[#101927] p-5 text-left transition hover:border-sky-700/70 hover:bg-[#132033]"><span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</span><span className="mt-4 block text-3xl font-bold text-slate-50">{value}</span><span className="mt-1 block text-xs text-slate-500">{detail}</span></button>)}</div>
+      <section className="mt-8 overflow-hidden rounded-xl border border-slate-800 bg-[#101927]"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4"><div><h2 className="font-semibold text-slate-100">Trainers y cartera</h2><p className="mt-1 text-xs text-slate-500">Relaciones obtenidas del ownership persistido.</p></div><button onClick={() => navigate('trainers')} className="text-sm font-semibold text-sky-300">Ver directorio →</button></div>{model.trainers.length === 0 ? <Empty title="No hay Trainers registrados" detail="No hay perfiles con role=trainer." /> : model.trainers.map(item => <button key={item.id} onClick={() => openTrainer(item.id)} className="grid w-full grid-cols-[1fr_auto_auto_20px] items-center gap-4 border-b border-slate-800 px-5 py-4 text-left last:border-b-0 hover:bg-white/[0.025]"><span className="min-w-0"><span className="block truncate font-medium text-slate-100">{item.name}</span><span className="mt-1 block truncate text-xs text-slate-500">{item.email || 'Sin correo en profiles'}</span></span><span className="text-right text-xs text-slate-400">{item.clients.length} Clients</span><span className="text-right text-xs text-slate-400">{item.programs.length} Programs</span><ChevronRight className="h-4 w-4 text-slate-600" /></button>)}</section>
+    </>}</>;
+  } else if (section === 'trainers' && trainer) {
+    content = <><Back label="Volver a Trainers" onClick={() => setSelectedId(null)} /><Heading eyebrow="Ficha Trainer · Solo lectura" title={trainer.name} detail="El rol procede de profiles.role; trainer_profiles solo aporta información de presentación." /><div className="mb-6 grid gap-4 rounded-xl border border-slate-800 bg-[#101927] p-5 sm:grid-cols-3"><Info label="Correo" value={trainer.email || 'No disponible'} /><Info label="Alta del perfil" value={fmtDate(trainer.createdAt)} /><Info label="Estado Auth" value="No expuesto por el modelo actual" /></div><div className="grid gap-6 xl:grid-cols-2"><RecordList title={`Clients · ${trainer.clients.length}`} empty="Este Trainer no tiene Clients asociados." rows={trainer.clients.map(row => ({ id: String(row.id), title: row.name || 'Client sin nombre', detail: row.email || 'Sin correo' }))} onOpen={openClient} /><RecordList title={`Programs · ${trainer.programs.length}`} empty="Este Trainer no tiene Programs asociados." rows={trainer.programs.map(row => ({ id: String(row.id), title: row.name || 'Program sin nombre', detail: `${row.type || 'Tipo no indicado'} · ${row.days_per_week ?? '—'} días/semana` }))} onOpen={id => navigate('programs', id)} /></div></>;
+  } else if (section === 'trainers') {
+    content = <><Heading eyebrow="Directorio global" title="Trainers" detail="Perfiles con role=trainer. El perfil de presentación no concede permisos." />{loadState() || (model.trainers.length === 0 ? <Empty title="No hay Trainers" detail="No hay perfiles Trainer disponibles." /> : <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#101927]"><TableHeader labels={['Trainer', 'Clients', 'Programs', 'Creado']} />{model.trainers.map(row => <button key={row.id} onClick={() => openTrainer(row.id)} className="grid w-full grid-cols-[minmax(0,1fr)_90px_90px_110px_20px] items-center gap-3 border-t border-slate-800 px-5 py-4 text-left hover:bg-white/[0.025]"><span className="min-w-0"><span className="block truncate font-medium text-slate-100">{row.name}</span><span className="mt-1 block truncate text-xs text-slate-500">{row.email || 'Sin correo'}</span></span><span className="text-sm text-slate-300">{row.clients.length}</span><span className="text-sm text-slate-300">{row.programs.length}</span><span className="text-xs text-slate-500">{fmtDate(row.createdAt)}</span><ChevronRight className="h-4 w-4 text-slate-600" /></button>)}</div>)}</>;
+  } else if (section === 'clients' && client) {
+    content = <><Back label="Volver a Clients" onClick={() => setSelectedId(null)} /><Heading eyebrow="Ficha Client · Solo lectura" title={client.name || 'Client sin nombre'} detail="El estado mostrado corresponde a la relación de servicio, no al estado de la cuenta Auth." /><div className="mb-6 grid gap-4 rounded-xl border border-slate-800 bg-[#101927] p-5 sm:grid-cols-2 xl:grid-cols-4"><Info label="Correo" value={client.email || 'No disponible'} /><Info label="Teléfono" value={client.phone || 'No disponible'} /><Info label="Estado de relación" value={client.status || 'No especificado'} /><Info label="Objetivo" value={client.objective || 'No especificado'} /><Info label="Trainer" value={client.trainer?.name || 'Sin Trainer asociado'} onClick={client.trainer ? () => openTrainer(client.trainer!.id) : undefined} /><Info label="Program asignado" value={client.program?.name || 'Sin Program asignado'} onClick={client.program ? () => navigate('programs', String(client.program.id)) : undefined} /><Info label="Alta del registro" value={fmtDate(client.created_at)} /><Info label="Cuenta Auth" value={client.user_id ? 'Vinculada; estado no expuesto' : 'Sin cuenta vinculada'} /></div></>;
+  } else if (section === 'clients') {
+    content = <><Heading eyebrow="Directorio global" title="Clients" detail="Registros visibles para Admin según RLS, con Trainer propietario y Program asignado cuando existen." />{loadState() || (model.clients.length === 0 ? <Empty title="No hay Clients" detail="No hay registros de clientes disponibles." /> : <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#101927]"><TableHeader labels={['Client', 'Trainer', 'Estado relación', 'Program']} />{model.clients.map(row => <button key={String(row.id)} onClick={() => openClient(String(row.id))} className="grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_130px_minmax(0,1fr)_20px] items-center gap-3 border-t border-slate-800 px-5 py-4 text-left hover:bg-white/[0.025]"><span className="min-w-0"><span className="block truncate font-medium text-slate-100">{row.name || 'Client sin nombre'}</span><span className="mt-1 block truncate text-xs text-slate-500">{row.email || 'Sin correo'}</span></span><span className="truncate text-sm text-slate-300">{row.trainer?.name || 'Sin Trainer'}</span><span className="text-xs text-slate-400">{row.status || 'Sin estado'}</span><span className="truncate text-sm text-slate-300">{row.program?.name || 'Sin Program'}</span><ChevronRight className="h-4 w-4 text-slate-600" /></button>)}</div>)}</>;
+  } else if (section === 'programs') {
+    const detail = selectedId ? model.programs.find(row => String(row.id) === selectedId) : null;
+    content = detail ? <><Back label="Volver a Programs" onClick={() => setSelectedId(null)} /><Heading eyebrow="Program · Solo lectura" title={detail.name || 'Program sin nombre'} detail={`${detail.type || 'Tipo no indicado'} · ${detail.level || 'Nivel no indicado'}`} /><div className="mb-6 rounded-xl border border-slate-800 bg-[#101927] p-5"><Info label="Trainer propietario" value={detail.trainer?.name || 'Propietario no visible'} onClick={detail.trainer ? () => openTrainer(detail.trainer!.id) : undefined} /></div><RecordList title={`Clients asignados · ${detail.clients.length}`} empty="No hay Clients asociados a este Program." rows={detail.clients.map(row => ({ id: String(row.id), title: row.name || 'Client sin nombre', detail: row.email || 'Sin correo' }))} onOpen={openClient} /></> : <><Heading eyebrow="Catálogo operativo" title="Programs" detail="Programas persistidos y relaciones actuales. Esta vista no permite edición, transferencia ni borrado." />{loadState() || (model.programs.length === 0 ? <Empty title="No hay Programs" detail="No existen programas disponibles." /> : <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#101927]"><TableHeader labels={['Program', 'Trainer', 'Clients asignados', 'Frecuencia']} />{model.programs.map(row => <button key={String(row.id)} onClick={() => setSelectedId(String(row.id))} className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_130px_130px_20px] items-center gap-3 border-t border-slate-800 px-5 py-4 text-left hover:bg-white/[0.025]"><span className="truncate font-medium text-slate-100">{row.name || 'Program sin nombre'}</span><span className="truncate text-sm text-slate-300">{row.trainer?.name || 'Sin Trainer'}</span><span className="text-sm text-slate-400">{row.clients.length}</span><span className="text-xs text-slate-400">{row.days_per_week ?? '—'} días/semana</span><ChevronRight className="h-4 w-4 text-slate-600" /></button>)}</div>)}</>;
+  } else if (section === 'nutrition') {
+    content = <><Heading eyebrow="Datos operativos" title="Nutrition" detail="Planes persistidos en nutrition_plans. Vista de consulta; no crea ni modifica planes." />{loadState() || (model.nutritionPlans.length === 0 ? <Empty title="No hay planes nutricionales" detail="La consulta terminó correctamente y no devolvió nutrition plans." /> : <div className="overflow-hidden rounded-xl border border-slate-800 bg-[#101927]"><TableHeader labels={['Plan', 'Client', 'Trainer', 'Actualizado']} />{model.nutritionPlans.map(row => <div key={String(row.id)} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_120px] gap-3 border-t border-slate-800 px-5 py-4 text-sm"><span className="truncate font-medium text-slate-100">Plan {String(row.id)}</span><button onClick={() => row.client && openClient(String(row.client.id))} className="truncate text-left text-sky-300">{row.client?.name || 'Client no disponible'}</button><button onClick={() => row.trainer && openTrainer(row.trainer.id)} className="truncate text-left text-sky-300">{row.trainer?.name || 'Trainer no disponible'}</button><span className="text-xs text-slate-500">{fmtDate(row.updated_at)}</span></div>)}</div>)}</>;
+  } else {
+    content = <><Heading eyebrow="Roadmap Admin" title={title} detail="Esta sección está prevista en el contrato funcional, pero todavía no se implementó." /><Empty title="Aún no disponible" detail="No se muestran datos ficticios ni controles que aparenten estar activos." /></>;
+  }
+
+  return <div className="min-h-screen bg-[#080D16] text-slate-100 lg:flex">
+    <aside className="flex w-full flex-col border-b border-slate-800 bg-[#0C1420] lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r"><div className="flex items-center justify-between px-5 py-5 lg:px-6"><div><div className="text-[10px] font-bold uppercase tracking-[0.25em] text-sky-400">S-TRAINER</div><div className="mt-1 text-sm font-semibold">Control plane</div></div><span className="rounded-full border border-sky-900 bg-sky-950/60 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-300">Admin</span></div><nav aria-label="Navegación Admin" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-1 lg:flex-col lg:overflow-visible lg:pt-5">{NAV.map(item => { const Icon = item.icon; return <button key={item.id} disabled={!item.available} onClick={() => item.available && navigate(item.id)} className={`flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${section === item.id ? 'bg-sky-500/10 font-semibold text-sky-200 ring-1 ring-inset ring-sky-800/70' : item.available ? 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-100' : 'cursor-not-allowed text-slate-600'}`}><Icon className="h-4 w-4" /><span>{item.label}</span>{!item.available && <span className="ml-auto hidden text-[9px] uppercase tracking-wider lg:inline">Próximamente</span>}</button>; })}</nav><div className="hidden border-t border-slate-800 p-4 lg:block"><p className="text-[11px] text-slate-500">Solo lectura · sin acciones de cambio</p><button onClick={() => void signOut()} className="mt-4 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 hover:bg-white/[0.04] hover:text-white"><LogOut className="h-4 w-4" /> Cerrar sesión</button></div></aside>
+    <div className="min-w-0 flex-1"><header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/90 bg-[#080D16]/95 px-5 py-4 backdrop-blur md:px-8"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">S-TRAINER / Admin</p><p className="mt-1 text-sm font-semibold text-slate-200">{title}</p></div><div className="flex items-center gap-2"><div className="relative w-[min(64vw,420px)]"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><input value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setSearch(''); }} placeholder="Buscar Trainer o Client…" aria-label="Buscar Trainers y Clients" className="h-10 w-full rounded-lg border border-slate-800 bg-[#101927] pl-9 pr-3 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-sky-700" />{search.trim() && <div className="absolute right-0 top-12 z-30 max-h-[65vh] w-full overflow-auto rounded-xl border border-slate-700 bg-[#101927] p-2 shadow-2xl">{status !== 'ready' ? <p className="px-3 py-4 text-sm text-slate-400">{status === 'loading' ? 'Cargando datos…' : 'Búsqueda no disponible por error de carga.'}</p> : searchResults.trainers.length + searchResults.clients.length === 0 ? <p className="px-3 py-4 text-sm text-slate-400">Sin resultados para “{search.trim()}”.</p> : <>{searchResults.trainers.map(row => <button key={`trainer-${row.id}`} onClick={() => openTrainer(row.id)} className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left hover:bg-white/[0.05]"><span><span className="block text-sm font-medium text-slate-100">{row.name}</span><span className="text-xs text-slate-500">Trainer · {row.email}</span></span><ChevronRight className="h-4 w-4 text-slate-600" /></button>)}{searchResults.clients.map(row => <button key={`client-${row.id}`} onClick={() => openClient(String(row.id))} className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left hover:bg-white/[0.05]"><span><span className="block text-sm font-medium text-slate-100">{row.name}</span><span className="text-xs text-slate-500">Client · {row.email}</span></span><ChevronRight className="h-4 w-4 text-slate-600" /></button>)}</>}</div>}</div><button onClick={() => void load()} aria-label="Actualizar datos desde Supabase" title="Actualizar desde Supabase" className="grid h-10 w-10 place-items-center rounded-lg border border-slate-800 text-lg text-slate-400 hover:border-sky-800 hover:text-sky-200">↻</button></div></header><main className="mx-auto max-w-[1440px] p-5 md:p-8 xl:p-10">{content}<footer className="mt-12 flex items-center justify-between border-t border-slate-900 pt-4 text-[11px] text-slate-600"><span>Consultado desde Supabase con sesión Admin</span><span>Vista de solo lectura</span></footer></main></div>
+  </div>;
 };
+
+const Heading: React.FC<{ eyebrow: string; title: string; detail: string }> = ({ eyebrow, title, detail }) => <div className="mb-7"><p className="text-[11px] font-bold uppercase tracking-[0.2em] text-sky-400">{eyebrow}</p><h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-50 md:text-3xl">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">{detail}</p></div>;
+const Empty: React.FC<{ title: string; detail: string }> = ({ title, detail }) => <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-12 text-center"><p className="font-semibold text-slate-200">{title}</p><p className="mt-2 text-sm text-slate-500">{detail}</p></div>;
+const Info: React.FC<{ label: string; value: string; onClick?: () => void }> = ({ label, value, onClick }) => <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>{onClick ? <button onClick={onClick} className="mt-1 text-left text-sm font-medium text-sky-300 hover:text-sky-200">{value}</button> : <p className="mt-1 text-sm font-medium text-slate-200">{value}</p>}</div>;
+const Back: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => <button onClick={onClick} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-sky-300 hover:text-sky-200"><ArrowLeft className="h-4 w-4" />{label}</button>;
+const TableHeader: React.FC<{ labels: string[] }> = ({ labels }) => <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_130px_130px_20px] gap-3 bg-slate-900/60 px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 md:grid">{labels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div>;
+const RecordList: React.FC<{ title: string; empty: string; rows: { id: string; title: string; detail: string }[]; onOpen: (id: string) => void }> = ({ title, empty, rows, onOpen }) => <section className="overflow-hidden rounded-xl border border-slate-800 bg-[#101927]"><div className="border-b border-slate-800 px-5 py-4 font-semibold text-slate-100">{title}</div>{rows.length === 0 ? <div className="p-4"><Empty title="Sin registros" detail={empty} /></div> : rows.map(row => <button key={row.id} onClick={() => onOpen(row.id)} className="flex w-full items-center justify-between gap-3 border-b border-slate-800 px-5 py-4 text-left last:border-0 hover:bg-white/[0.025]"><span className="min-w-0"><span className="block truncate text-sm font-medium text-slate-100">{row.title}</span><span className="mt-1 block truncate text-xs text-slate-500">{row.detail}</span></span><ChevronRight className="h-4 w-4 shrink-0 text-slate-600" /></button>)}</section>;

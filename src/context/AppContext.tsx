@@ -52,7 +52,6 @@ interface AppContextType {
   retryProfileRoleResolution: () => Promise<void>;
   supabaseStatus: SupabaseStatus;
   isRealtimeActive: boolean;
-  lastSyncTime: Date | null;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
   signUp: (params: { 
     email: string; 
@@ -63,7 +62,6 @@ interface AppContextType {
     avatarUrl?: string;
   }) => Promise<{ success: boolean; error?: string; message?: string }>;
   signOut: () => Promise<void>;
-  syncAllToSupabase: () => Promise<{ success: boolean; error?: string }>;
   refreshFromSupabase: (authenticatedUserId?: string, authenticatedRole?: UserRole | null) => Promise<void>;
 }
 
@@ -160,7 +158,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>('connecting');
   const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Derived Admin flag
   const isAdmin = userRole === 'admin';
@@ -349,7 +346,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setTrainer(trainerRes.data);
       }
 
-      setLastSyncTime(new Date());
     } catch (e) {
       console.warn('Error refreshing from Supabase:', e);
     }
@@ -391,28 +387,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!role || !profile) return;
     if (role === 'client') await loadRealClientForUser(supabaseUser.id);
     await refreshFromSupabase(supabaseUser.id, role);
-  };
-
-  // Push all local data to Supabase (manual full sync / seed)
-  const syncAllToSupabase = async (): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const clientsErr = await supabaseDb.bulkUpsertClients(clients, supabaseUser?.id);
-      if (clientsErr.error) throw clientsErr.error;
-
-      const programsErr = await supabaseDb.bulkUpsertPrograms(programs, supabaseUser?.id);
-      if (programsErr.error) throw programsErr.error;
-
-      for (const [cId, plan] of Object.entries(nutritionPlans)) {
-        await supabaseDb.upsertNutritionPlan(cId, plan, supabaseUser?.id);
-      }
-
-      await supabaseDb.upsertTrainerProfile(trainer);
-      setLastSyncTime(new Date());
-      setSupabaseStatus('connected');
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Error al sincronizar con Supabase' };
-    }
   };
 
   // Setup Supabase Auth listener & Realtime channels on mount
@@ -574,7 +548,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
               return [updated, ...prev];
             });
-            setLastSyncTime(new Date());
           }
         }
       })
@@ -593,7 +566,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
               return [updated, ...prev];
             });
-            setLastSyncTime(new Date());
           }
         }
       })
@@ -603,7 +575,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const plan = payload.new?.data as NutritionPlan;
           if (client_id && plan) {
             setNutritionPlans(prev => ({ ...prev, [client_id]: plan }));
-            setLastSyncTime(new Date());
           }
         }
       })
@@ -1058,11 +1029,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         retryProfileRoleResolution,
         supabaseStatus,
         isRealtimeActive,
-        lastSyncTime,
         signIn,
         signUp,
         signOut,
-        syncAllToSupabase,
         refreshFromSupabase
       }}
     >

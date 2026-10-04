@@ -50,8 +50,7 @@ export const TrainerApp: React.FC = () => {
     isAdmin,
     signOut, 
     supabaseStatus,
-    isRealtimeActive,
-    syncAllToSupabase
+    isRealtimeActive
   } = useApp();
 
   // Navigation & Data State
@@ -59,7 +58,6 @@ export const TrainerApp: React.FC = () => {
   const [selectedClient, setSelectedClient] = useState<ClientData | null>(null);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [nutritionClientId, setNutritionClientId] = useState<string>('');
-  const [isSyncing, setIsSyncing] = useState(false);
 
   // Trainer profile editing state
   const [showTrainerModal, setShowTrainerModal] = useState(false);
@@ -70,12 +68,6 @@ export const TrainerApp: React.FC = () => {
 
   const handleLogout = async () => {
     await signOut();
-  };
-
-  const handleManualSync = async () => {
-    setIsSyncing(true);
-    await syncAllToSupabase();
-    setIsSyncing(false);
   };
 
   const handleTrainerPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,14 +149,6 @@ export const TrainerApp: React.FC = () => {
                 <span className={`w-2 h-2 rounded-full ${isRealtimeActive ? 'bg-[#CFFF5C] animate-pulse' : 'bg-[#FFD34D]'}`} />
                 <span className="font-semibold text-[#F5F4F0]">Supabase Realtime</span>
               </div>
-              <button
-                onClick={handleManualSync}
-                disabled={isSyncing}
-                className="text-[9px] text-[var(--accent-color,#CFFF5C)] hover:underline cursor-pointer disabled:opacity-50"
-                title="Sincronizar base de datos completa"
-              >
-                {isSyncing ? 'Sincronizando...' : 'Sync'}
-              </button>
             </div>
           </div>
 

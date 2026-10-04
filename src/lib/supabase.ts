@@ -104,18 +104,6 @@ export const supabaseDb = {
     }
   },
 
-  async bulkUpsertClients(clientsList: ClientData[], ownerId?: string): Promise<{ error: any }> {
-    try {
-      const payloads = clientsList.map(c => serializeClientToDb(c, ownerId));
-      const { error } = await supabase
-        .from('clients')
-        .upsert(payloads, { onConflict: 'id' });
-      return { error };
-    } catch (err) {
-      return { error: err };
-    }
-  },
-
   // Programs
   async getPrograms(trainerId: string): Promise<{ data: Program[] | null; error: any }> {
     try {
@@ -157,33 +145,6 @@ export const supabaseDb = {
       const { error } = await supabase
         .from('programs')
         .upsert(payload, { onConflict: 'id' });
-      return { error };
-    } catch (err) {
-      return { error: err };
-    }
-  },
-
-  async bulkUpsertPrograms(programsList: Program[], ownerId?: string): Promise<{ error: any }> {
-    try {
-      const payloads = programsList.map(p => {
-        const payload: any = {
-          id: p.id,
-          name: p.name,
-          type: p.type,
-          level: p.level,
-          duration_weeks: p.durationWeeks,
-          days_per_week: p.daysPerWeek,
-          data: p,
-          updated_at: new Date().toISOString()
-        };
-        if (ownerId) {
-          payload.trainer_id = ownerId;
-        }
-        return payload;
-      });
-      const { error } = await supabase
-        .from('programs')
-        .upsert(payloads, { onConflict: 'id' });
       return { error };
     } catch (err) {
       return { error: err };

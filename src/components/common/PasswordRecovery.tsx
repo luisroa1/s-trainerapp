@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Lock } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Loader2, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import {
+  completePasswordRecovery,
+  getPasswordRecoveryLoginPath,
+  signOutRecoverySession,
+} from '../../lib/passwordRecoveryCompletion.mjs';
 
 export const PasswordRecovery: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -9,7 +14,8 @@ export const PasswordRecovery: React.FC = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   useEffect(() => {
     const cleanUrl = `${window.location.pathname}${window.location.search}`;
@@ -29,31 +35,57 @@ export const PasswordRecovery: React.FC = () => {
     }
 
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    const result = await completePasswordRecovery(
+      supabase.auth,
+      password,
+      redirectToLogin,
+    );
     setLoading(false);
 
-    if (updateError) {
-      setError(updateError.message || 'No se pudo actualizar la contraseña.');
+    if (!result.passwordUpdated) {
+      setError(result.error?.message || 'No se pudo actualizar la contraseña.');
       return;
     }
 
-    setDone(true);
+    setPasswordUpdated(true);
+    if (!result.signedOut) {
+      setSignOutError(result.error?.message || 'No se pudo cerrar la sesión local.');
+    }
   };
 
-  if (done) {
+  const redirectToLogin = () => {
+    window.location.replace(getPasswordRecoveryLoginPath(window.location.href));
+  };
+
+  const retryLocalSignOut = async () => {
+    setLoading(true);
+    const result = await signOutRecoverySession(supabase.auth, redirectToLogin);
+    setLoading(false);
+    if (!result.ok) setSignOutError(result.error?.message || 'No se pudo cerrar la sesión local.');
+  };
+
+  if (passwordUpdated) {
     return (
       <div className="min-h-screen w-full bg-[#101012] text-[#F5F4F0] flex items-center justify-center p-5">
         <div className="w-full max-w-md rounded-[28px] border border-[#2A2A2F] bg-[#16161A] p-8 shadow-2xl text-center">
-          <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-[var(--accent-color,#CFFF5C)]" />
           <h1 className="text-2xl font-extrabold mb-2">Contraseña actualizada</h1>
-          <p className="text-sm text-[#8E8E94] mb-6">Ya puedes entrar en S-TRAINER con tu nueva contraseña.</p>
-          <button
-            onClick={() => { window.history.replaceState({}, document.title, window.location.pathname); window.location.reload(); }}
-            className="w-full rounded-full py-3 font-extrabold text-sm cursor-pointer"
-            style={{ backgroundColor: 'var(--accent-color,#CFFF5C)', color: 'var(--accent-text,#101012)' }}
-          >
-            Volver al acceso
-          </button>
+          {signOutError ? (
+            <>
+              <p role="alert" className="text-sm text-[#FF9B8A] mb-6">
+                La contraseña cambió, pero no se pudo cerrar esta sesión: {signOutError}
+              </p>
+              <button
+                onClick={() => void retryLocalSignOut()}
+                disabled={loading}
+                className="w-full rounded-full py-3 font-extrabold text-sm cursor-pointer disabled:opacity-60"
+                style={{ backgroundColor: 'var(--accent-color,#CFFF5C)', color: 'var(--accent-text,#101012)' }}
+              >
+                {loading ? 'Cerrando sesión...' : 'Reintentar cierre de sesión'}
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-[#8E8E94]">Cerrando la sesión para volver al acceso...</p>
+          )}
         </div>
       </div>
     );

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { User, Session } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
 import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
+import { resolveProfileRole } from '../lib/profileRole.mjs';
 
 const INITIAL_TRAINER: TrainerProfile = {
   id: '',
@@ -46,6 +47,9 @@ interface AppContextType {
   userRole: UserRole | null;
   isAdmin: boolean;
   authLoading: boolean;
+  profileRoleStatus: 'idle' | 'loading' | 'resolved' | 'error';
+  profileRoleError: string | null;
+  retryProfileRoleResolution: () => Promise<void>;
   supabaseStatus: SupabaseStatus;
   isRealtimeActive: boolean;
   lastSyncTime: Date | null;
@@ -149,9 +153,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Supabase State
   const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
   const [supabaseSession, setSupabaseSession] = useState<Session | null>(null);
-  const [userRole, setUserRole] = useState<UserRole | null>(() => {
-    return (localStorage.getItem('strainer_user_role') as UserRole) || null;
-  });
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [profileRoleStatus, setProfileRoleStatus] = useState<'idle' | 'loading' | 'resolved' | 'error'>('loading');
+  const [profileRoleError, setProfileRoleError] = useState<string | null>(null);
+  const profileRoleRequest = useRef(0);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>('connecting');
   const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
@@ -350,6 +355,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [clients, programs, supabaseUser?.id]);
 
+  const loadProfileRole = async (userId: string) => {
+    const request = ++profileRoleRequest.current;
+    setUserRole(null);
+    setProfileRoleStatus('loading');
+    setProfileRoleError(null);
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, role, full_name, email, avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+      const role = resolveProfileRole({ profile, error }) as UserRole | null;
+      if (request !== profileRoleRequest.current) return { profile: null, role: null };
+      if (!role) {
+        setProfileRoleStatus('error');
+        setProfileRoleError('No se pudo validar el perfil y su rol. Reintenta o cierra sesión.');
+        return { profile: null, role: null };
+      }
+      setUserRole(role);
+      setProfileRoleStatus('resolved');
+      return { profile, role };
+    } catch {
+      if (request === profileRoleRequest.current) {
+        setProfileRoleStatus('error');
+        setProfileRoleError('No se pudo validar el perfil y su rol. Reintenta o cierra sesión.');
+      }
+      return { profile: null, role: null };
+    }
+  };
+
+  const retryProfileRoleResolution = async () => {
+    if (!supabaseUser?.id) return;
+    const { profile, role } = await loadProfileRole(supabaseUser.id);
+    if (!role || !profile) return;
+    if (role === 'client') await loadRealClientForUser(supabaseUser.id);
+    await refreshFromSupabase(supabaseUser.id, role);
+  };
+
   // Push all local data to Supabase (manual full sync / seed)
   const syncAllToSupabase = async (): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -416,20 +459,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Get initial session after processing a callback, if present.
     establishCallbackSession().then(async ({ data: { session }, error }) => {
       if (!isMounted) return;
+      setAuthLoading(false);
       if (session?.user) {
         setSupabaseSession(session);
         setSupabaseUser(session.user);
         try {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, role, full_name, email, avatar_url')
-            .eq('id', session.user.id)
-            .maybeSingle();
+          const { profile, role } = await loadProfileRole(session.user.id);
 
-          if (isMounted) {
-            const role = (profile?.role as UserRole) || (session.user.user_metadata?.role as UserRole) || 'client';
-            setUserRole(role);
-            localStorage.setItem('strainer_user_role', role);
+          if (isMounted && role && profile) {
 
             if ((role === 'trainer' || role === 'admin') && profile) {
               const isRoleAdmin = role === 'admin';
@@ -453,6 +490,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (e) {
           console.warn('Error fetching initial profile:', e);
         }
+      } else {
+        profileRoleRequest.current += 1;
+        setUserRole(null);
+        setProfileRoleStatus('idle');
+        setProfileRoleError(null);
       }
       if (isMounted) setAuthLoading(false);
     });
@@ -464,16 +506,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
         try {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, role, full_name, email, avatar_url')
-            .eq('id', session.user.id)
-            .maybeSingle();
+          const { profile, role } = await loadProfileRole(session.user.id);
 
-          if (isMounted) {
-            const role = (profile?.role as UserRole) || (session.user.user_metadata?.role as UserRole) || 'client';
-            setUserRole(role);
-            localStorage.setItem('strainer_user_role', role);
+          if (isMounted && role && profile) {
 
             if ((role === 'trainer' || role === 'admin') && profile) {
               const isRoleAdmin = role === 'admin';
@@ -506,7 +541,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       } else {
+        profileRoleRequest.current += 1;
         setUserRole(null);
+        setProfileRoleStatus('idle');
+        setProfileRoleError(null);
         setTrainer(INITIAL_TRAINER);
         setRealClient(null);
         activeProgramOwnerId.current = null;
@@ -601,15 +639,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupabaseUser(data.user);
       setSupabaseSession(data.session);
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, role, full_name, email, avatar_url')
-        .eq('id', data.user.id)
-        .maybeSingle();
-
-      const role = (profile?.role as UserRole) || (data.user?.user_metadata?.role as UserRole) || 'client';
-      setUserRole(role);
-      localStorage.setItem('strainer_user_role', role);
+      const { profile, role } = await loadProfileRole(data.user.id);
+      if (!role || !profile) {
+        setAuthLoading(false);
+        return { success: false, error: 'No se pudo validar el perfil de esta cuenta. Reintenta o contacta con soporte.' };
+      }
 
       // Link trainer or client
       if (role === 'trainer' || role === 'admin') {
@@ -667,8 +701,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const createdUser = data.user;
-      setUserRole(role);
-      localStorage.setItem('strainer_user_role', role);
+      // The selected signup role is user input. Only profiles.role may grant an app role.
+      setUserRole(null);
+      setProfileRoleStatus(data.session ? 'loading' : 'idle');
+      localStorage.removeItem('strainer_user_role');
 
       // If registered as trainer, update trainer profile
       if (role === 'trainer') {
@@ -766,6 +802,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const signOut = async () => {
+    profileRoleRequest.current += 1;
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -774,6 +811,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupabaseUser(null);
     setSupabaseSession(null);
     setUserRole(null);
+    setProfileRoleStatus('idle');
+    setProfileRoleError(null);
     setRealClient(null);
     setTrainer(INITIAL_TRAINER);
     localStorage.removeItem('strainer_user_role');
@@ -1014,6 +1053,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userRole,
         isAdmin,
         authLoading,
+        profileRoleStatus,
+        profileRoleError,
+        retryProfileRoleResolution,
         supabaseStatus,
         isRealtimeActive,
         lastSyncTime,

@@ -59,9 +59,6 @@ export const TrainerLogin: React.FC<TrainerLoginProps> = ({
         return;
       }
 
-      // Guardar rol en localStorage igual que se hace para trainer
-      localStorage.setItem('strainer_user_role', profile.role);
-
       // 3. Sincronizar datos reales del entrenador o administrador
       const isRoleAdmin = profile.role === 'admin';
       const roleDisplay = isRoleAdmin ? 'Administrador' : 'Entrenador';

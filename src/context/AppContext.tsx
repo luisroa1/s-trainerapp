@@ -36,9 +36,9 @@ interface AppContextType {
   addTrainerNote: (clientId: string, content: string) => void;
   updateProgram: (program: Program) => void;
   addProgram: (program: Program) => void;
-  updateNutritionPlan: (clientId: string, plan: NutritionPlan) => void;
-  toggleMealCompleted: (clientId: string, mealId: string) => void;
-  toggleShoppingItem: (clientId: string, category: string, itemName: string) => void;
+  updateNutritionPlan: (clientId: string, plan: NutritionPlan) => Promise<void>;
+  toggleMealCompleted: (clientId: string, mealId: string) => Promise<void>;
+  toggleShoppingItem: (clientId: string, category: string, itemName: string) => Promise<void>;
   addFoodToLog: (clientId: string, foodName: string, kcal: number, protein?: number) => void;
   resetAllData: () => void;
   // Supabase Auth & Realtime
@@ -921,42 +921,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const updateNutritionPlan = (clientId: string, plan: NutritionPlan) => {
-    setNutritionPlans(prev => {
-      const next = { ...prev, [clientId]: plan };
-      supabaseDb.upsertNutritionPlan(clientId, plan).catch(() => {});
-      return next;
-    });
+  const updateNutritionPlan = async (clientId: string, plan: NutritionPlan) => {
+    if (userRole !== 'trainer') {
+      throw new Error('Solo una cuenta Trainer puede guardar planes nutricionales desde este flujo.');
+    }
+    const { error } = await supabaseDb.upsertNutritionPlan(clientId, plan);
+    if (error) throw error;
+    setNutritionPlans(prev => ({ ...prev, [clientId]: { ...plan, clientId } }));
   };
 
-  const toggleMealCompleted = (clientId: string, mealId: string) => {
-    setNutritionPlans(prev => {
-      const plan = prev[clientId];
-      if (!plan) return prev;
-      const updatedMeals = plan.meals.map(m => m.id === mealId ? { ...m, completed: !m.completed } : m);
-      const updatedPlan = { ...plan, meals: updatedMeals };
-      supabaseDb.upsertNutritionPlan(clientId, updatedPlan).catch(() => {});
-      return { ...prev, [clientId]: updatedPlan };
-    });
+  const toggleMealCompleted = async (clientId: string, mealId: string) => {
+    const plan = nutritionPlans[clientId];
+    if (!plan) return;
+    const updatedMeals = plan.meals.map(m => m.id === mealId ? { ...m, completed: !m.completed } : m);
+    const updatedPlan = { ...plan, meals: updatedMeals };
+    const { error } = await supabaseDb.upsertNutritionPlan(clientId, updatedPlan);
+    if (error) throw error;
+    setNutritionPlans(prev => ({ ...prev, [clientId]: updatedPlan }));
   };
 
-  const toggleShoppingItem = (clientId: string, categoryName: string, itemName: string) => {
-    setNutritionPlans(prev => {
-      const plan = prev[clientId];
-      if (!plan) return prev;
-      const updatedCategories = plan.shoppingList.map(cat => {
-        if (cat.category === categoryName) {
-          return {
-            ...cat,
-            items: cat.items.map(item => item.name === itemName ? { ...item, checked: !item.checked } : item)
-          };
-        }
-        return cat;
-      });
-      const updatedPlan = { ...plan, shoppingList: updatedCategories };
-      supabaseDb.upsertNutritionPlan(clientId, updatedPlan).catch(() => {});
-      return { ...prev, [clientId]: updatedPlan };
+  const toggleShoppingItem = async (clientId: string, categoryName: string, itemName: string) => {
+    const plan = nutritionPlans[clientId];
+    if (!plan) return;
+    const updatedCategories = plan.shoppingList.map(cat => {
+      if (cat.category === categoryName) {
+        return {
+          ...cat,
+          items: cat.items.map(item => item.name === itemName ? { ...item, checked: !item.checked } : item)
+        };
+      }
+      return cat;
     });
+    const updatedPlan = { ...plan, shoppingList: updatedCategories };
+    const { error } = await supabaseDb.upsertNutritionPlan(clientId, updatedPlan);
+    if (error) throw error;
+    setNutritionPlans(prev => ({ ...prev, [clientId]: updatedPlan }));
   };
 
   const addFoodToLog = (clientId: string, foodName: string, kcal: number) => {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ShoppingCart, Pill, Calculator, Check } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -15,6 +15,17 @@ export const ClientNutrition: React.FC<ClientNutritionProps> = ({
 }) => {
   const { activeClient, nutritionPlans, toggleMealCompleted } = useApp();
   const currentPlan = activeClient ? nutritionPlans[activeClient.id] : undefined;
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+
+  const handleMealToggle = async (mealId: string) => {
+    if (!activeClient) return;
+    setPersistenceError(null);
+    try {
+      await toggleMealCompleted(activeClient.id, mealId);
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : 'No se pudo guardar el cambio.');
+    }
+  };
 
   const consumedKcal = activeClient?.metrics?.kcalToday || 0;
   const targetKcal = currentPlan?.targetKcal || activeClient?.metrics?.kcalGoal || 2000;
@@ -64,6 +75,12 @@ export const ClientNutrition: React.FC<ClientNutritionProps> = ({
           </button>
         </div>
       </div>
+
+      {persistenceError && (
+        <p role="alert" className="mb-3 rounded-lg bg-red-950 p-2 text-xs text-red-200">
+          No se guardó el cambio: {persistenceError}
+        </p>
+      )}
 
       {/* Circular Kcal Ring */}
       <div className="flex flex-col items-center justify-center my-3">
@@ -180,7 +197,7 @@ export const ClientNutrition: React.FC<ClientNutritionProps> = ({
           {currentPlan.meals.map((meal) => (
             <div
               key={meal.id}
-              onClick={() => activeClient && toggleMealCompleted(activeClient.id, meal.id)}
+              onClick={() => void handleMealToggle(meal.id)}
               className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
             >
               <div>

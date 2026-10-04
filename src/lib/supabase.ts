@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
+import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
@@ -173,23 +174,10 @@ export const supabaseDb = {
     }
   },
 
-  async upsertNutritionPlan(clientId: string, plan: NutritionPlan, ownerId?: string): Promise<{ error: any }> {
+  async upsertNutritionPlan(clientId: string, plan: NutritionPlan): Promise<{ error: any }> {
     try {
-      const payload: any = {
-        id: plan.id || `nut-${clientId}`,
-        client_id: clientId,
-        data: plan,
-        updated_at: new Date().toISOString()
-      };
-      // Solo incluir trainer_id si se pasa explícitamente (al crear nuevo plan)
-      if (ownerId) {
-        payload.trainer_id = ownerId;
-      }
-
-      const { error } = await supabase
-        .from('nutrition_plans')
-        .upsert(payload, { onConflict: 'id' });
-      return { error };
+      await persistNutritionPlanForCurrentUser(supabase, clientId, plan);
+      return { error: null };
     } catch (err) {
       return { error: err };
     }

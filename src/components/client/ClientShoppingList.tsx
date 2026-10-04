@@ -10,6 +10,17 @@ export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }
   const { activeClient, nutritionPlans, toggleShoppingItem } = useApp();
   const currentPlan = activeClient ? nutritionPlans[activeClient.id] : undefined;
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+
+  const handleShoppingToggle = async (category: string, itemName: string) => {
+    if (!activeClient) return;
+    setPersistenceError(null);
+    try {
+      await toggleShoppingItem(activeClient.id, category, itemName);
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : 'No se pudo guardar el cambio.');
+    }
+  };
 
   const handleShare = () => {
     if (!currentPlan?.shoppingList || currentPlan.shoppingList.length === 0) return;
@@ -59,6 +70,11 @@ export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }
           {toastMessage}
         </div>
       )}
+      {persistenceError && (
+        <p role="alert" className="mb-3 rounded-lg bg-red-950 p-2 text-xs text-red-200">
+          No se guardó el cambio: {persistenceError}
+        </p>
+      )}
 
       {/* Categorized List */}
       {(!currentPlan?.shoppingList || currentPlan.shoppingList.length === 0) ? (
@@ -79,7 +95,7 @@ export const ClientShoppingList: React.FC<ClientShoppingListProps> = ({ onBack }
               {cat.items.map((item, itemIdx) => (
                 <div
                   key={itemIdx}
-                  onClick={() => activeClient && toggleShoppingItem(activeClient.id, cat.category, item.name)}
+                  onClick={() => void handleShoppingToggle(cat.category, item.name)}
                   className="px-4 py-3.5 flex items-center gap-3.5 cursor-pointer hover:bg-[#232328]/50 transition-colors"
                 >
                   <div

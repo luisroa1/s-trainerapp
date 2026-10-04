@@ -15,10 +15,10 @@ export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = (
   onSave
 }) => {
   const { clients, nutritionPlans, updateNutritionPlan } = useApp();
-  const client = clients.find(c => c.id === clientId) || clients[0];
+  const client = clients.find(c => c.id === clientId);
   const initialPlan = nutritionPlans[clientId] || {
-    id: `nut-${clientId || 'nuevo'}`,
-    clientId: clientId || '',
+    id: `nut-${clientId}`,
+    clientId,
     clientName: client?.name || 'Cliente',
     objective: client?.objective || 'Pérdida de grasa',
     dietType: 'Omnívora',
@@ -35,6 +35,8 @@ export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = (
   const [newMealName, setNewMealName] = useState('');
   const [newMealIngredients, setNewMealIngredients] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Helper to re-derive shopping list items from meals
   const deriveShoppingList = (meals: typeof plan.meals) => {
@@ -136,14 +138,36 @@ export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = (
     }));
   };
 
-  const handleSavePlan = (andAssign: boolean) => {
-    updateNutritionPlan(client.id, plan);
-    setToast(andAssign ? `¡Plan asignado y visible para ${client.name}!` : 'Borrador guardado');
-    setTimeout(() => {
-      setToast(null);
-      onSave();
-    }, 1200);
+  const handleSavePlan = async (andAssign: boolean) => {
+    if (!client) {
+      setSaveError('No se encontró el cliente seleccionado. No se guardó el plan.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    setToast(null);
+    try {
+      await updateNutritionPlan(client.id, { ...plan, clientId: client.id });
+      setToast(andAssign ? `¡Plan asignado y visible para ${client.name}!` : 'Borrador guardado');
+      setTimeout(() => {
+        setToast(null);
+        onSave();
+      }, 1200);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar el plan nutricional.');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (!client) {
+    return (
+      <div role="alert" className="p-8 text-sm text-red-300">
+        No se encontró el cliente seleccionado. No se puede guardar el plan.
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-[1240px] mx-auto pb-24">
@@ -181,13 +205,15 @@ export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = (
         {/* Action buttons */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => handleSavePlan(false)}
+            onClick={() => void handleSavePlan(false)}
+            disabled={isSaving}
             className="px-5 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
           >
             Guardar borrador
           </button>
           <button
-            onClick={() => handleSavePlan(true)}
+            onClick={() => void handleSavePlan(true)}
+            disabled={isSaving}
             style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
             className="px-6 py-2.5 rounded-full font-bold text-xs shadow-md transition-all active:scale-95"
           >
@@ -200,6 +226,11 @@ export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = (
         <div className="mb-4 p-3 rounded-xl bg-[var(--accent-color,#CFFF5C)] text-[#101012] text-xs font-bold text-center animate-in fade-in flex items-center justify-center gap-2">
           <Check className="w-4 h-4 stroke-[3]" />
           {toast}
+        </div>
+      )}
+      {saveError && (
+        <div role="alert" className="mb-4 p-3 rounded-xl bg-red-950 text-red-200 text-xs font-bold text-center">
+          No se guardó el plan: {saveError}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { activateClientAccount } from './activation.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,121 +7,94 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+const jsonResponse = (status: number, body: unknown) => new Response(
+  JSON.stringify(body),
+  { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+);
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return jsonResponse(405, { error: 'Método no permitido.' });
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Faltan variables SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el entorno');
-      return new Response(
-        JSON.stringify({ error: 'Configuración del servidor incompleta (service_role no configurada)' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) {
+      return jsonResponse(500, { error: 'Configuración del servidor incompleta.' });
     }
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'No autorizado: falta el encabezado de autenticación.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const authorization = req.headers.get('Authorization');
+    if (!authorization) return jsonResponse(401, { error: 'Falta la sesión de autenticación.' });
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey || supabaseServiceRoleKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) return jsonResponse(401, { error: 'La sesión no es válida. Vuelve a iniciar sesión.' });
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const {
-      data: { user: callerUser },
-      error: callerError,
-    } = await userClient.auth.getUser();
-
-    if (callerError || !callerUser) {
-      return new Response(
-        JSON.stringify({ error: 'Sesión inválida o expirada. Por favor, vuelve a iniciar sesión.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false },
-    });
-
-    const callerEmail = (callerUser.email || '').toLowerCase().trim();
-
-    let existingRow = null;
-
-    const byUserId = await adminClient
-      .from('clients')
-      .select('id, email, status')
-      .eq('user_id', callerUser.id)
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('id, role')
+      .eq('id', user.id)
       .maybeSingle();
 
-    if (byUserId.data) {
-      existingRow = byUserId.data;
-    } else if (callerEmail) {
-      const byEmail = await adminClient
-        .from('clients')
-        .select('id, email, status')
-        .ilike('email', callerEmail)
-        .maybeSingle();
-      if (byEmail.data) {
-        existingRow = byEmail.data;
-      }
-    }
+    const store = {
+      async findByUserId(userId: string) {
+        const { data, error } = await adminClient
+          .from('clients')
+          .select('id, user_id')
+          .eq('user_id', userId)
+          .limit(2);
+        return { data: data || [], error };
+      },
+      async findByExactEmail(email: string) {
+        const { data, error } = await adminClient
+          .from('clients')
+          .select('id, user_id')
+          .eq('email', email)
+          .limit(2);
+        return { data: data || [], error };
+      },
+      async claimUnlinked(clientId: string, userId: string, timestamp: string) {
+        const { data, error } = await adminClient
+          .from('clients')
+          .update({ status: 'Activo', user_id: userId, updated_at: timestamp })
+          .eq('id', clientId)
+          .is('user_id', null)
+          .select('id, status')
+          .maybeSingle();
+        return { data, error };
+      },
+      async activateLinked(clientId: string, userId: string, timestamp: string) {
+        const { data, error } = await adminClient
+          .from('clients')
+          .update({ status: 'Activo', updated_at: timestamp })
+          .eq('id', clientId)
+          .eq('user_id', userId)
+          .select('id, status')
+          .maybeSingle();
+        return { data, error };
+      },
+      async findById(clientId: string) {
+        const { data, error } = await adminClient
+          .from('clients')
+          .select('id, user_id')
+          .eq('id', clientId)
+          .maybeSingle();
+        return { data, error };
+      },
+    };
 
-    if (!existingRow) {
-      return new Response(
-        JSON.stringify({
-          error: `No se encontró ninguna fila en la tabla clients para el usuario ${callerEmail || callerUser.id}.`,
-        }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { data: updatedRow, error: updateError } = await adminClient
-      .from('clients')
-      .update({
-        status: 'Activo',
-        user_id: callerUser.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', existingRow.id)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error('Error actualizando status a Activo en clients:', updateError);
-      return new Response(
-        JSON.stringify({ error: `No se pudo activar el cliente en la tabla clients: ${updateError.message}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (updatedRow?.data && typeof updatedRow.data === 'object') {
-      const mergedData = { ...updatedRow.data, status: 'Activo' };
-      await adminClient.from('clients').update({ data: mergedData }).eq('id', existingRow.id);
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, client: updatedRow }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (err) {
-    const errorMessage = err instanceof Error && err.message
-      ? err.message
-      : 'Error interno del servidor en Edge Function';
-    console.error('Error inesperado en activate-client:', err);
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const outcome = await activateClientAccount({ user, profile, profileError, store });
+    return jsonResponse(outcome.status, outcome.body);
+  } catch (error) {
+    console.error('Error inesperado en activate-client:', error);
+    return jsonResponse(500, { error: 'Error interno al activar el cliente.' });
   }
 });

@@ -5,6 +5,7 @@ import { buildAppCallbackUrl } from '../src/lib/appCallbackUrl.mjs';
 import { clearSuccessfulActivationFlow } from '../src/lib/activationUrl.mjs';
 import { resolveAuthorizedRedirect } from '../supabase/functions/_shared/authorizedRedirect.mjs';
 import { isPasswordRecoveryRoute } from '../src/lib/passwordRecoveryRoute.mjs';
+import { invokeInviteAndRefreshClients } from '../src/lib/inviteClientFlow.mjs';
 
 test('recovery callback survives AppContext consuming the Auth fragment', () => {
   assert.equal(isPasswordRecoveryRoute({ search: '?flow=recovery', hash: '' }), true);
@@ -119,4 +120,34 @@ test('trainer invitation only selects owned programs and fails closed without on
   assert.match(edgeFunction, /if \(!assignedProgramId\)/);
   assert.match(edgeFunction, /programRow\.trainer_id !== callerUser\.id/);
   assert.ok(edgeFunction.indexOf('programRow.trainer_id !== callerUser.id') < edgeFunction.indexOf('adminClient.auth.admin.inviteUserByEmail('));
+});
+
+test('successful trainer invitation refreshes existing clients without a second writer', async () => {
+  const calls = [];
+  const serverClient = { id: 'server-created-client', email: 'fixture@example.test' };
+  const result = await invokeInviteAndRefreshClients({
+    invoke: async () => {
+      calls.push('invite-client-write');
+      return { data: { success: true, client: serverClient }, error: null };
+    },
+    refreshClients: async () => {
+      calls.push('refresh-existing-clients');
+    },
+  });
+
+  assert.deepEqual(calls, ['invite-client-write', 'refresh-existing-clients']);
+  assert.equal(result.data.client, serverClient);
+
+  const source = readFileSync(new URL('../src/components/trainer/TrainerInvite.tsx', import.meta.url), 'utf8');
+  assert.match(source, /invokeInviteAndRefreshClients\(/);
+  assert.match(source, /refreshClients: \(\) => refreshFromSupabase\(/);
+  assert.doesNotMatch(source, /\baddClient\s*\(/);
+  assert.doesNotMatch(source, /(?:supabaseDb\.)?(?:upsertClient|bulkUpsertClients)\s*\(/);
+
+  const failedCalls = [];
+  await invokeInviteAndRefreshClients({
+    invoke: async () => ({ data: null, error: new Error('invitation failed') }),
+    refreshClients: async () => failedCalls.push('refresh'),
+  });
+  assert.deepEqual(failedCalls, []);
 });

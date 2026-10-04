@@ -3,6 +3,7 @@ import { ArrowLeft, Send, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { getAppCallbackUrl } from '../../lib/appUrl';
+import { invokeInviteAndRefreshClients } from '../../lib/inviteClientFlow.mjs';
 
 interface TrainerInviteProps {
   onBack: () => void;
@@ -10,7 +11,7 @@ interface TrainerInviteProps {
 }
 
 export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess }) => {
-  const { programs, addClient, appName, supabaseUser } = useApp();
+  const { programs, appName, supabaseUser, userRole, refreshFromSupabase } = useApp();
   const trainerPrograms = programs.filter(program => program.trainerId === supabaseUser?.id);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -55,15 +56,18 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
       const redirectTo = getAppCallbackUrl({ flow: 'activate' });
 
       // 1. Invocar la Edge Function 'invite-client' en Supabase
-      const { data, error } = await supabase.functions.invoke('invite-client', {
-        body: {
-          name: name.trim(),
-          email: email.trim(),
-          objective,
-          startDate,
-          assignedProgramId: assignedProgram,
-          redirectTo,
-        },
+      const { data, error } = await invokeInviteAndRefreshClients({
+        invoke: () => supabase.functions.invoke('invite-client', {
+          body: {
+            name: name.trim(),
+            email: email.trim(),
+            objective,
+            startDate,
+            assignedProgramId: assignedProgram,
+            redirectTo,
+          },
+        }),
+        refreshClients: () => refreshFromSupabase(supabaseUser?.id, userRole),
       });
 
       // 2. Manejar posibles errores devueltos por la Edge Function
@@ -98,17 +102,8 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
         return;
       }
 
-      // 3. Éxito: Sincronizar cliente en el estado de la app
-      const returnedClient = data?.client || {
-        name: name.trim(),
-        email: email.trim(),
-        objective,
-        status: 'Pendiente',
-        assignedProgramId: assignedProgram,
-        startDate,
-      };
-
-      addClient(returnedClient);
+      // invite-client is the sole writer for the new client row. Refresh the
+      // existing list so React displays the server-created row without a second upsert.
       setIsLoading(false);
       setSent(true);
 

@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   UserCheck
 } from 'lucide-react';
-import { supabase, supabaseDb } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 import { clearSuccessfulActivationFlow } from '../../lib/activationUrl.mjs';
 
@@ -23,7 +23,7 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
   onFinishActivation,
   onGoToLogin 
 }) => {
-  const { appName, supabaseUser, activeClient, updateClient, refreshFromSupabase } = useApp();
+  const { appName, updateClient, refreshFromSupabase } = useApp();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -154,50 +154,21 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
         return;
       }
 
-      const userEmail = data.user?.email || resolvedEmail;
+      // 2. La asociación privilegiada de la fila ocurre únicamente en el backend.
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('activate-client', {
+        body: {},
+      });
 
-      // 2. Activar cliente vía Edge Function 'activate-client' (vía principal con service_role)
-      let activatedViaEdgeFunction = false;
-      try {
-        const { data: edgeData, error: edgeError } = await supabase.functions.invoke('activate-client', {
-          body: {},
-        });
-
-        if (!edgeError && edgeData?.success) {
-          activatedViaEdgeFunction = true;
-          console.log('Cliente activado con éxito vía Edge Function activate-client:', edgeData);
-          if (edgeData.client?.id) {
-            updateClient(edgeData.client.id, { status: 'Activo' });
-          }
-        } else if (edgeError) {
-          console.warn('Edge Function activate-client reportó advertencia, intentando respaldo directo:', edgeError);
-        }
-      } catch (funcErr) {
-        console.warn('Excepción al invocar activate-client, intentando respaldo directo:', funcErr);
+      if (edgeError || !edgeData?.success || !edgeData.client?.id) {
+        setIsLoading(false);
+        setErrorMessage(
+          edgeData?.error || edgeError?.message ||
+          'La contraseña se guardó, pero no se pudo verificar la activación. Contacta con tu entrenador antes de volver a intentarlo.',
+        );
+        return;
       }
 
-      // Respaldo best-effort directo en tabla clients si la Edge Function no estuviera disponible
-      if (!activatedViaEdgeFunction && userEmail) {
-        try {
-          await supabase
-            .from('clients')
-            .update({
-              status: 'Activo',
-              user_id: data.user?.id,
-              updated_at: new Date().toISOString(),
-            })
-            .ilike('email', userEmail);
-        } catch (dbErr) {
-          console.warn('Advertencia actualizando estado en tabla clients (respaldo directo):', dbErr);
-        }
-
-        // Si tenemos un cliente activo en contexto, actualizarlo
-        if (activeClient && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
-          updateClient(activeClient.id, { status: 'Activo' });
-        }
-      } else if (activeClient && userEmail && activeClient.email.toLowerCase() === userEmail.toLowerCase()) {
-        updateClient(activeClient.id, { status: 'Activo' });
-      }
+      updateClient(edgeData.client.id, { status: 'Activo' });
 
       window.history.replaceState(
         null,

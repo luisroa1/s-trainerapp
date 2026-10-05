@@ -35,8 +35,8 @@ interface AppContextType {
   updateClientPhoto: (id: string, avatarUrl: string) => void;
   addClient: (client: Partial<ClientData>) => void;
   addTrainerNote: (clientId: string, content: string) => void;
-  updateProgram: (program: Program) => void;
-  addProgram: (program: Program) => void;
+  saveProgram: (program: Program) => Promise<void>;
+  applyProgramVersion: (programId: string) => Promise<{ id: string; version_number: number }>;
   updateNutritionPlan: (clientId: string, plan: NutritionPlan) => Promise<void>;
   toggleMealCompleted: (clientId: string, mealId: string) => Promise<void>;
   toggleShoppingItem: (clientId: string, category: string, itemName: string) => Promise<void>;
@@ -839,21 +839,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const updateProgram = (program: Program) => {
-    setPrograms(prev => {
-      const next = prev.map(p => p.id === program.id ? program : p);
-      supabaseDb.upsertProgram(program).catch(() => {});
-      return next;
-    });
+  const saveProgram = async (program: Program) => {
+    if (userRole !== 'trainer' || !supabaseUser?.id || accountAccessStatus !== 'enabled') {
+      throw new Error('Solo un Trainer con acceso habilitado puede guardar programas.');
+    }
+
+    const isExistingProgram = programs.some(existing => existing.id === program.id);
+    const { data, error } = await supabaseDb.upsertProgram(
+      program,
+      isExistingProgram ? undefined : supabaseUser.id
+    );
+    if (error) throw error;
+    if (!data?.id) throw new Error('Supabase no confirmó el guardado del programa.');
+
+    setPrograms(prev => prev.some(existing => existing.id === program.id)
+      ? prev.map(existing => existing.id === program.id ? program : existing)
+      : [program, ...prev]);
   };
 
-  const addProgram = (program: Program) => {
-    setPrograms(prev => {
-      const next = [program, ...prev];
-      // Solo se envía ownerId (supabaseUser?.id) al crear el programa, nunca al editarlo
-      supabaseDb.upsertProgram(program, supabaseUser?.id).catch(() => {});
-      return next;
-    });
+  const applyProgramVersion = async (programId: string) => {
+    if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
+      throw new Error('Solo un Trainer con acceso habilitado puede aplicar una prescripción.');
+    }
+    const { data, error } = await supabaseDb.applyProgramVersion(programId);
+    if (error) throw error;
+    if (!data?.id || !Number.isInteger(data.version_number)) {
+      throw new Error('Supabase no confirmó la versión aplicada.');
+    }
+    return { id: data.id as string, version_number: data.version_number as number };
   };
 
   const updateNutritionPlan = async (clientId: string, plan: NutritionPlan) => {
@@ -946,8 +959,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateClientPhoto,
         addClient,
         addTrainerNote,
-        updateProgram,
-        addProgram,
+        saveProgram,
+        applyProgramVersion,
         updateNutritionPlan,
         toggleMealCompleted,
         toggleShoppingItem,

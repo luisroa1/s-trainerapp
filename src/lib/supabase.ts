@@ -129,7 +129,7 @@ export const supabaseDb = {
     }
   },
 
-  async upsertProgram(program: Program, ownerId?: string): Promise<{ error: any }> {
+  async upsertProgram(program: Program, ownerId?: string): Promise<{ data: { id: string } | null; error: any }> {
     try {
       const payload: any = {
         id: program.id,
@@ -146,12 +146,26 @@ export const supabaseDb = {
         payload.trainer_id = ownerId;
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('programs')
-        .upsert(payload, { onConflict: 'id' });
-      return { error };
+        .upsert(payload, { onConflict: 'id' })
+        .select('id')
+        .single();
+      return { data, error };
     } catch (err) {
-      return { error: err };
+      return { data: null, error: err };
+    }
+  },
+
+  async applyProgramVersion(programId: string): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('apply_program_version', {
+        p_program_id: programId,
+      });
+      const version = Array.isArray(data) ? data[0] || null : data;
+      return { data: version, error };
+    } catch (err) {
+      return { data: null, error: err };
     }
   },
 

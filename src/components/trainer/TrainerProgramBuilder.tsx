@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Edit2, Plus, Trash2, GripVertical, Check, Sparkles } from 'lucide-react';
-import { Program, ExerciseItem } from '../../types';
+import { ArrowLeft, Edit2, Plus, Trash2, GripVertical, Check } from 'lucide-react';
+import { Program, ProgramDay, ExerciseItem } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { normalizeProgramIds, saveThenApply } from '../../lib/programVersion.mjs';
 
 interface TrainerProgramBuilderProps {
   program: Program;
@@ -14,77 +15,71 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
   onBack,
   onSave
 }) => {
-  const { updateProgram } = useApp();
-  const [currentWeek, setCurrentWeek] = useState(1);
+  const { saveProgram, applyProgramVersion } = useApp();
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [programName, setProgramName] = useState(program.name);
-  const [days, setDays] = useState(program.days.length > 0 ? program.days : [
-    {
-      id: 'd-1',
-      dayNumber: 1,
-      title: 'Día 1 · Empuje',
-      focusArea: 'Empuje',
-      exercises: [
-        { id: 'ex-1', name: 'Press banca', muscleGroup: 'Pecho', sets: 4, reps: 8, weight: '80 kg', rir: 2, restSeconds: 120, order: 1 },
-        { id: 'ex-2', name: 'Press militar', muscleGroup: 'Hombro', sets: 3, reps: 10, weight: '45 kg', rir: 2, restSeconds: 90, order: 2 },
-        { id: 'ex-3', name: 'Fondos en paralelas', muscleGroup: 'Tríceps', sets: 3, reps: 12, weight: 'Peso corp.', rir: 3, restSeconds: 90, order: 3 },
-        { id: 'ex-4', name: 'Elevaciones laterales', muscleGroup: 'Deltoides', sets: 3, reps: 15, weight: '10 kg', rir: 3, restSeconds: 60, order: 4 },
-        { id: 'ex-5', name: 'Extensión tríceps en polea', muscleGroup: 'Tríceps', sets: 3, reps: 12, weight: '25 kg', rir: 2, restSeconds: 60, order: 5 },
-      ]
-    },
-    {
-      id: 'd-2',
-      dayNumber: 2,
-      title: 'Día 2 · Tirón',
-      focusArea: 'Tirón',
-      exercises: [
-        { id: 'ex-6', name: 'Dominadas neutras', muscleGroup: 'Espalda', sets: 4, reps: 8, weight: 'Peso corp.', rir: 2, restSeconds: 120, order: 1 },
-        { id: 'ex-7', name: 'Remo con barra', muscleGroup: 'Espalda media', sets: 4, reps: 10, weight: '65 kg', rir: 2, restSeconds: 90, order: 2 },
-      ]
-    },
-    {
-      id: 'd-3',
-      dayNumber: 3,
-      title: 'Día 3 · Pierna',
-      focusArea: 'Pierna',
-      exercises: [
-        { id: 'ex-10', name: 'Sentadilla', muscleGroup: 'Cuádriceps', sets: 4, reps: 8, weight: '80 kg', rir: 2, restSeconds: 120, order: 1 },
-        { id: 'ex-11', name: 'Peso muerto rumano', muscleGroup: 'Isquios', sets: 4, reps: 10, weight: '85 kg', rir: 2, restSeconds: 120, order: 2 },
-      ]
-    },
-    {
-      id: 'd-4',
-      dayNumber: 4,
-      title: 'Día 4 · Full body',
-      focusArea: 'Full body',
-      exercises: [
-        { id: 'ex-14', name: 'Press inclinado', muscleGroup: 'Pecho sup.', sets: 3, reps: 10, weight: '26 kg', rir: 2, restSeconds: 90, order: 1 },
-      ]
-    }
-  ]);
+  const [days, setDays] = useState<ProgramDay[]>(() => normalizeProgramIds(program).days as ProgramDay[]);
 
   const [editingExercise, setEditingExercise] = useState<ExerciseItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newExName, setNewExName] = useState('');
-  const [newExSets, setNewExSets] = useState(3);
-  const [newExReps, setNewExReps] = useState(10);
-  const [newExWeight, setNewExWeight] = useState('20 kg');
-  const [newExRir, setNewExRir] = useState(2);
+  const [newExSets, setNewExSets] = useState<number | ''>('');
+  const [newExReps, setNewExReps] = useState<number | ''>('');
+  const [newExWeight, setNewExWeight] = useState('');
+  const [newExRir, setNewExRir] = useState<number | ''>('');
+  const [newExRestSeconds, setNewExRestSeconds] = useState<number | ''>('');
   const [toast, setToast] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const activeDay = days[activeDayIndex] || days[0];
 
-  const handleSaveProgram = (andAssign: boolean = false) => {
-    updateProgram({
-      ...program,
-      name: programName,
-      days
-    });
-    setToast(andAssign ? '¡Programa guardado y asignado a clientes!' : 'Borrador de programa guardado');
-    setTimeout(() => {
-      setToast(null);
-      onSave();
-    }, 1200);
+  const handleSaveProgram = async (apply = false) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+    setToast(null);
+    const normalized = normalizeProgramIds({ ...program, name: programName, days });
+    let editableWorkSaved = false;
+    try {
+      if (apply) {
+        await saveThenApply(
+          normalized,
+          async (savedProgram: Program) => {
+            await saveProgram(savedProgram);
+            editableWorkSaved = true;
+          },
+          applyProgramVersion,
+        );
+        setToast('Prescripción aplicada y guardada como versión.');
+      } else {
+        await saveProgram(normalized);
+        setToast('Cambios guardados.');
+      }
+      window.setTimeout(() => {
+        setToast(null);
+        onSave();
+      }, 900);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Error desconocido.';
+      setErrorMessage(apply && editableWorkSaved
+        ? `El trabajo editable se guardó, pero no se pudo aplicar la prescripción. ${detail}`
+        : `No se pudo guardar el programa. ${detail}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddDay = () => {
+    const dayNumber = days.length + 1;
+    setDays(previous => [...previous, {
+      id: globalThis.crypto.randomUUID(),
+      dayNumber,
+      title: `Día ${dayNumber}`,
+      focusArea: '',
+      exercises: [],
+    }]);
+    setActiveDayIndex(days.length);
   };
 
   const handleDeleteExercise = (exId: string) => {
@@ -100,16 +95,16 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
   };
 
   const handleAddExercise = () => {
-    if (!newExName.trim()) return;
+    if (!activeDay || !newExName.trim() || newExSets === '' || newExReps === '' || newExRir === '' || newExRestSeconds === '') return;
     const newEx: ExerciseItem = {
-      id: `ex-${Date.now()}`,
+      id: globalThis.crypto.randomUUID(),
       name: newExName.trim(),
       muscleGroup: activeDay.focusArea,
       sets: newExSets,
       reps: newExReps,
       weight: newExWeight,
       rir: newExRir,
-      restSeconds: 90,
+      restSeconds: newExRestSeconds,
       order: activeDay.exercises.length + 1
     };
 
@@ -124,6 +119,11 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
     }));
 
     setNewExName('');
+    setNewExSets('');
+    setNewExReps('');
+    setNewExWeight('');
+    setNewExRir('');
+    setNewExRestSeconds('');
     setShowAddModal(false);
   };
 
@@ -174,9 +174,6 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
               <span className="px-2.5 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94]">
                 {days.length} días/semana
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#CFFF5C]/10 border border-[#CFFF5C]/20 text-[#CFFF5C] font-semibold flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Generado automáticamente
-              </span>
             </div>
           </div>
         </div>
@@ -184,17 +181,19 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => handleSaveProgram(false)}
+            onClick={() => void handleSaveProgram(false)}
+            disabled={isSaving}
             className="px-5 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
           >
-            Guardar borrador
+            Guardar
           </button>
           <button
-            onClick={() => handleSaveProgram(true)}
+            onClick={() => void handleSaveProgram(true)}
+            disabled={isSaving}
             style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
             className="px-6 py-2.5 rounded-full font-bold text-xs shadow-md transition-all active:scale-95"
           >
-            Guardar y asignar
+            Aplicar prescripción
           </button>
         </div>
       </div>
@@ -206,80 +205,11 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
         </div>
       )}
 
-      {/* Info notice */}
-      <div className="p-3.5 rounded-[14px] bg-[#16161A] border border-[#2A2A2F] text-xs text-[#8E8E94] mb-6 flex items-center gap-2">
-        <Sparkles className="w-4 h-4 text-[var(--accent-color,#CFFF5C)]" />
-        <span>Generado con la plantilla {program.type}. Ajusta lo que necesites: ejercicios, cargas o notas.</span>
-      </div>
-
-      {/* VOLUMEN POR SEMANA (Progression Chart) */}
-      <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            VOLUMEN POR SEMANA
-          </span>
-          <span className="text-xs text-[#8E8E94]">
-            Semana 4 y 8 · descarga automática
-          </span>
+      {errorMessage && (
+        <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          {errorMessage}
         </div>
-
-        {/* 8-Bar Visualization */}
-        <div className="grid grid-cols-8 gap-3 items-end h-20 mb-4 px-2">
-          {[
-            { w: 1, val: 80, deload: false },
-            { w: 2, val: 85, deload: false },
-            { w: 3, val: 90, deload: false },
-            { w: 4, val: 55, deload: true },
-            { w: 5, val: 92, deload: false },
-            { w: 6, val: 96, deload: false },
-            { w: 7, val: 100, deload: false },
-            { w: 8, val: 60, deload: true },
-          ].map((bar) => (
-            <div key={bar.w} className="flex flex-col items-center gap-1.5 h-full justify-end">
-              <div
-                className="w-full rounded-md transition-all duration-300 relative group cursor-pointer"
-                style={{
-                  height: `${bar.val}%`,
-                  backgroundColor: bar.deload
-                    ? '#2A2A2F'
-                    : currentWeek === bar.w
-                    ? 'var(--accent-color, #CFFF5C)'
-                    : 'rgba(207, 255, 92, 0.45)'
-                }}
-                onClick={() => setCurrentWeek(bar.w)}
-              >
-                {bar.deload && (
-                  <span className="absolute -top-5 inset-x-0 text-[8px] text-center text-[#8E8E94] font-semibold">
-                    descarga
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Week Buttons */}
-        <div className="grid grid-cols-8 gap-2">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((w) => {
-            const isDeload = w === 4 || w === 8;
-            const isSelected = currentWeek === w;
-            return (
-              <button
-                key={w}
-                onClick={() => setCurrentWeek(w)}
-                className={`py-2 px-1 rounded-xl text-xs font-bold text-center transition-all ${
-                  isSelected
-                    ? 'bg-[var(--accent-color,#CFFF5C)] text-[#101012] shadow-sm'
-                    : 'bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94] hover:text-[#F5F4F0]'
-                }`}
-              >
-                S{w}
-                {isDeload && <span className="block text-[8px] font-normal lowercase leading-none mt-0.5">descarga</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* Day Selector Tabs */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
@@ -296,8 +226,15 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
             {day.title}
           </button>
         ))}
+        <button
+          onClick={handleAddDay}
+          className="px-4 py-2.5 rounded-full text-xs font-bold border border-dashed border-[#3A3A40] text-[#8E8E94] hover:text-[#F5F4F0]"
+        >
+          + Añadir día
+        </button>
       </div>
 
+      {activeDay ? <>
       {/* Exercise List */}
       <div className="rounded-[16px] bg-[#16161A] border border-[#2A2A2F] divide-y divide-[#2A2A2F]/50 overflow-hidden mb-5">
         {activeDay.exercises.map((exercise) => (
@@ -347,6 +284,12 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
         <Plus className="w-4 h-4 text-[var(--accent-color,#CFFF5C)]" />
         <span>Añadir ejercicio a {activeDay.title}</span>
       </button>
+      </> : (
+        <div className="rounded-[16px] bg-[#16161A] border border-dashed border-[#2A2A2F] p-10 text-center">
+          <p className="text-sm text-[#8E8E94]">Este programa todavía no tiene días ni ejercicios.</p>
+          <p className="mt-2 text-xs text-[#6E6E74]">Añade un día para empezar a definir la prescripción.</p>
+        </div>
+      )}
 
       {/* Edit Exercise Modal */}
       {editingExercise && (
@@ -428,7 +371,7 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
       )}
 
       {/* Add Exercise Modal */}
-      {showAddModal && (
+      {showAddModal && activeDay && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
           <div className="w-full max-w-[380px] bg-[#16161A] border border-[#2A2A2F] rounded-[24px] p-5 shadow-2xl">
             <h3 className="text-base font-bold text-[#F5F4F0] mb-4">
@@ -452,7 +395,7 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
                   <input
                     type="number"
                     value={newExSets}
-                    onChange={e => setNewExSets(Number(e.target.value))}
+                    onChange={e => setNewExSets(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:outline-none"
                   />
                 </div>
@@ -461,7 +404,7 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
                   <input
                     type="number"
                     value={newExReps}
-                    onChange={e => setNewExReps(Number(e.target.value))}
+                    onChange={e => setNewExReps(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:outline-none"
                   />
                 </div>
@@ -481,7 +424,17 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
                   <input
                     type="number"
                     value={newExRir}
-                    onChange={e => setNewExRir(Number(e.target.value))}
+                    onChange={e => setNewExRir(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#8E8E94] uppercase font-bold block mb-1">Descanso (segundos)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newExRestSeconds}
+                    onChange={e => setNewExRestSeconds(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:outline-none"
                   />
                 </div>
@@ -497,6 +450,7 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
               </button>
               <button
                 onClick={handleAddExercise}
+                disabled={!newExName.trim() || newExSets === '' || newExReps === '' || newExRir === '' || newExRestSeconds === ''}
                 style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
                 className="flex-1 py-2 rounded-full font-bold text-xs"
               >

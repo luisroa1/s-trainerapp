@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
+import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
@@ -37,8 +38,9 @@ export const serializeClientToDb = (client: ClientData, ownerId?: string) => {
     status: client.status,
     current_weight: client.currentWeight,
     adherence_percentage: client.adherencePercentage,
-    assigned_program_id: client.assignedProgramId,
-    data: client, // Full structured json
+    // Program assignment is written only by invite-client. Generic client
+    // upserts must not create or restore it from React/localStorage state.
+    data: clientDataWithoutLegacyAssignment(client), // Structured compatibility data
     updated_at: new Date().toISOString()
   };
 
@@ -63,13 +65,14 @@ export const deserializeClientFromDb = (row: any): ClientData => {
       status: row.status || row.data.status,
       currentWeight: Number(row.current_weight || row.data.currentWeight || 70),
       adherencePercentage: Number(row.adherence_percentage || row.data.adherencePercentage || 100),
-      assignedProgramId: row.assigned_program_id || row.data.assignedProgramId || '',
+      assignedProgramId: readAssignedProgramId(row),
       trainerId: row.trainer_id || row.data.trainerId
     };
   }
   return {
     ...(row.data as ClientData),
-    trainerId: row.trainer_id || (row.data as any)?.trainerId
+    trainerId: row.trainer_id || (row.data as any)?.trainerId,
+    assignedProgramId: readAssignedProgramId(row)
   };
 };
 

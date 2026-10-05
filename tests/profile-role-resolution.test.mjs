@@ -25,7 +25,7 @@ test('password recovery route does not depend on role resolution', () => {
 });
 
 test('profile errors never select trainer or admin application', () => {
-  assert.equal(resolveAppView({ hasUser: true, roleStatus: 'error', role: null }), 'profile-error');
-  assert.equal(resolveAppView({ hasUser: true, roleStatus: 'error', role: 'admin' }), 'profile-error');
-  assert.equal(resolveAppView({ hasUser: true, roleStatus: 'resolved', role: null }), 'profile-error');
+  assert.equal(resolveAppView({ hasUser: true, accessStatus: 'enabled', roleStatus: 'error', role: null }), 'profile-error');
+  assert.equal(resolveAppView({ hasUser: true, accessStatus: 'enabled', roleStatus: 'error', role: 'admin' }), 'profile-error');
+  assert.equal(resolveAppView({ hasUser: true, accessStatus: 'enabled', roleStatus: 'resolved', role: null }), 'profile-error');
 });

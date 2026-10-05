@@ -36,11 +36,7 @@ type Screen =
   | 'recordatorios'
   | 'guia';
 
-interface ClientAppProps {
-  onSwitchToTrainer?: () => void;
-}
-
-export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
+export const ClientApp: React.FC = () => {
   const { activeClient, signOut, supabaseUser, loadRealClientForUser } = useApp();
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
     if (typeof window !== 'undefined') {
@@ -159,8 +155,7 @@ export const ClientApp: React.FC<ClientAppProps> = ({ onSwitchToTrainer }) => {
 
         {currentScreen === 'onboarding' && (
           <ClientOnboarding 
-            onFinishOnboarding={() => setCurrentScreen('hoy')} 
-            onNavigateToTrainer={onSwitchToTrainer}
+            onFinishOnboarding={() => setCurrentScreen('hoy')}
           />
         )}
 

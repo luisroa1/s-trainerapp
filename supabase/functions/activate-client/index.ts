@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { resolveActivationPrincipal } from '../_shared/activation.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,121 +7,64 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+});
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'Método no permitido.' }, 405);
+
+  const authorization = req.headers.get('Authorization');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!authorization || !supabaseUrl || !anonKey || !serviceRoleKey) {
+    return json({ error: 'No se pudo validar la sesión de activación.' }, 401);
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Faltan variables SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el entorno');
-      return new Response(
-        JSON.stringify({ error: 'Configuración del servidor incompleta (service_role no configurada)' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'No autorizado: falta el encabezado de autenticación.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey || supabaseServiceRoleKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) return json({ error: 'La sesión no es válida o ha caducado.' }, 401);
 
-    const {
-      data: { user: callerUser },
-      error: callerError,
-    } = await userClient.auth.getUser();
-
-    if (callerError || !callerUser) {
-      return new Response(
-        JSON.stringify({ error: 'Sesión inválida o expirada. Por favor, vuelve a iniciar sesión.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false },
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-
-    const callerEmail = (callerUser.email || '').toLowerCase().trim();
-
-    let existingRow = null;
-
-    const byUserId = await adminClient
-      .from('clients')
-      .select('id, email, status')
-      .eq('user_id', callerUser.id)
-      .maybeSingle();
-
-    if (byUserId.data) {
-      existingRow = byUserId.data;
-    } else if (callerEmail) {
-      const byEmail = await adminClient
-        .from('clients')
-        .select('id, email, status')
-        .ilike('email', callerEmail)
-        .maybeSingle();
-      if (byEmail.data) {
-        existingRow = byEmail.data;
-      }
+    const [{ data: profile, error: profileError }, { data: access, error: accessError }] = await Promise.all([
+      adminClient.from('profiles').select('id,role').eq('id', user.id).maybeSingle(),
+      adminClient.from('account_access').select('state').eq('user_id', user.id).maybeSingle(),
+    ]);
+    const principal = resolveActivationPrincipal({
+      user,
+      profile,
+      profileError,
+      access,
+      accessError,
+    });
+    if (!principal.ok) {
+      if (principal.status === 500) console.error('activate-client identity state lookup failed');
+      return json({ error: principal.reason === 'identity_state_unavailable'
+        ? 'No se pudo verificar el estado de la cuenta. Inténtalo de nuevo.'
+        : 'Esta cuenta no puede completar la activación.' }, principal.status);
     }
 
-    if (!existingRow) {
-      return new Response(
-        JSON.stringify({
-          error: `No se encontró ninguna fila en la tabla clients para el usuario ${callerEmail || callerUser.id}.`,
-        }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const { data, error } = await adminClient.rpc('activate_client_account', {
+      p_user_id: principal.userId,
+      p_correlation_id: crypto.randomUUID(),
+    });
+    if (error || !data?.id || data?.status !== 'Activo') {
+      console.error('activate-client transaction failed', error?.code || 'invalid_rpc_result');
+      return json({ error: 'No se pudo completar la activación. Contacta con tu entrenador antes de volver a intentarlo.' }, 409);
     }
 
-    const { data: updatedRow, error: updateError } = await adminClient
-      .from('clients')
-      .update({
-        status: 'Activo',
-        user_id: callerUser.id,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', existingRow.id)
-      .select()
-      .single();
-
-    if (updateError) {
-      console.error('Error actualizando status a Activo en clients:', updateError);
-      return new Response(
-        JSON.stringify({ error: `No se pudo activar el cliente en la tabla clients: ${updateError.message}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (updatedRow?.data && typeof updatedRow.data === 'object') {
-      const mergedData = { ...updatedRow.data, status: 'Activo' };
-      await adminClient.from('clients').update({ data: mergedData }).eq('id', existingRow.id);
-    }
-
-    return new Response(
-      JSON.stringify({ success: true, client: updatedRow }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (err) {
-    const errorMessage = err instanceof Error && err.message
-      ? err.message
-      : 'Error interno del servidor en Edge Function';
-    console.error('Error inesperado en activate-client:', err);
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({ success: true, client: { id: data.id, status: data.status } });
+  } catch {
+    console.error('activate-client unexpected failure');
+    return json({ error: 'No se pudo completar la activación. Inténtalo de nuevo.' }, 500);
   }
 });

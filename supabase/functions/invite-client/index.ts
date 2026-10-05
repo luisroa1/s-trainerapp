@@ -1,362 +1,222 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { normalizeAuthorizedBaseUrl, resolveAuthorizedRedirect } from '../_shared/authorizedRedirect.mjs';
+import { resolveActorAccess, resolveActorRole } from '../_shared/accountAccess.mjs';
+import { runClientInvitation } from '../_shared/clientInvitationFlow.mjs';
 
-// Encabezados CORS para permitir llamadas desde el cliente web
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+});
+const normalizeEmail = (value: unknown) => typeof value === 'string' ? value.trim().toLowerCase() : '';
+
+async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
 
 Deno.serve(async (req: Request) => {
-  // Manejo de petición preflight CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'Método no permitido.' }, 405);
+
+  const authorization = req.headers.get('Authorization');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!authorization || !supabaseUrl || !anonKey || !serviceRoleKey) {
+    return json({ error: 'No se pudo validar la sesión del entrenador.' }, 401);
   }
 
   try {
-    // 1. Obtener variables de entorno inyectadas por Supabase
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Faltan variables SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en el entorno');
-      return new Response(
-        JSON.stringify({ error: 'Configuración del servidor incompleta (service_role no configurada)' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 2. Verificar que el usuario que llama está autenticado
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'No autorizado: falta el encabezado de autenticación.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Cliente con contexto del usuario para validar su token
-    const userClient = createClient(supabaseUrl, supabaseAnonKey || supabaseServiceRoleKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) return json({ error: 'La sesión no es válida o ha caducado.' }, 401);
 
-    const {
-      data: { user: callerUser },
-      error: callerError,
-    } = await userClient.auth.getUser();
-
-    if (callerError || !callerUser) {
-      return new Response(
-        JSON.stringify({ error: 'Sesión inválida o expirada. Por favor, vuelve a iniciar sesión.' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Cliente administrador con service_role (permisos totales para auth.admin y bypass de RLS)
-    const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false },
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-
-    // 3. Verificar que quien llama tiene role = 'trainer' en la tabla profiles
-    const { data: callerProfile, error: profileError } = await adminClient
-      .from('profiles')
-      .select('id, role, full_name, email')
-      .eq('id', callerUser.id)
-      .maybeSingle();
-
-    if (profileError) {
-      console.error('Error al consultar perfil del entrenador:', profileError);
+    const [{ data: profile, error: profileError }, { data: access, error: accessError }] = await Promise.all([
+      adminClient.from('profiles').select('id,role').eq('id', user.id).maybeSingle(),
+      adminClient.from('account_access').select('state').eq('user_id', user.id).maybeSingle(),
+    ]);
+    const roleResult = resolveActorRole({ user, profile, profileError, expectedRole: 'trainer' });
+    if (!roleResult.ok) {
+      if (roleResult.status === 500) console.error('invite-client profile lookup failed');
+      return json({ error: 'Solo un entrenador autorizado puede invitar clientes.' }, roleResult.status);
+    }
+    const accessResult = resolveActorAccess({ access, accessError });
+    if (!accessResult.ok) {
+      if (accessResult.status === 500) console.error('invite-client access lookup failed');
+      return json({ error: 'La cuenta del entrenador no tiene acceso habilitado.' }, accessResult.status);
     }
 
-    const isTrainer = callerProfile?.role === 'trainer';
-    if (!isTrainer) {
-      return new Response(
-        JSON.stringify({
-          error: 'Acceso denegado (403): Solo los usuarios con rol de entrenador pueden invitar clientes.',
-        }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 4. Leer los campos enviados desde el formulario
     const body = await req.json().catch(() => ({}));
-    const {
-      name,
-      email,
-      objective = 'Pérdida de grasa',
-      startDate,
-      assignedProgramId: rawAssignedProgramId,
-      redirectTo: customRedirectTo,
-    } = body;
-    const assignedProgramId = typeof rawAssignedProgramId === 'string'
-      ? rawAssignedProgramId.trim()
-      : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const email = normalizeEmail(body.email);
+    const objective = typeof body.objective === 'string' && body.objective.trim()
+      ? body.objective.trim()
+      : 'Pérdida de grasa';
+    const startDate = typeof body.startDate === 'string' ? body.startDate : new Date().toISOString().slice(0, 10);
+    const assignedProgramId = typeof body.assignedProgramId === 'string' ? body.assignedProgramId.trim() : '';
+    if (!name) return json({ error: 'El nombre del cliente es obligatorio.' }, 400);
+    if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json({ error: 'Introduce un correo electrónico válido.' }, 400);
+    }
+    if (!assignedProgramId) return json({ error: 'Selecciona un programa válido.' }, 400);
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return new Response(
-        JSON.stringify({ error: 'El nombre del cliente es obligatorio.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const { data: program, error: programError } = await adminClient
+      .from('programs').select('id').eq('id', assignedProgramId).eq('trainer_id', user.id).maybeSingle();
+    if (programError) {
+      console.error('invite-client program ownership lookup failed');
+      return json({ error: 'No se pudo verificar el programa seleccionado.' }, 500);
+    }
+    if (!program) return json({ error: 'El programa seleccionado no está disponible para esta cuenta.' }, 403);
+
+    const [{ data: existingClient, error: existingClientError }, { data: existingProfile, error: existingProfileError }] = await Promise.all([
+      adminClient.from('clients').select('id').eq('email', email).limit(2),
+      adminClient.from('profiles').select('id').eq('email', email).limit(2),
+    ]);
+    if (existingClientError || existingProfileError) {
+      console.error('invite-client duplicate lookup failed');
+      return json({ error: 'No se pudo comprobar si el correo ya está registrado.' }, 500);
+    }
+    if ((existingClient?.length || 0) > 1 || (existingProfile?.length || 0) > 1) {
+      return json({ error: 'La cuenta requiere revisión antes de invitarla.' }, 409);
+    }
+    if (existingClient?.length || existingProfile?.length) {
+      return json({ error: 'Ya existe una cuenta o ficha con ese correo.' }, 409);
     }
 
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      return new Response(
-        JSON.stringify({ error: 'El correo electrónico es obligatorio.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!assignedProgramId) {
-      return new Response(
-        JSON.stringify({ error: 'Selecciona un programa válido antes de invitar al cliente.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanName = name.trim();
-
-    // 5b. Verificar que el programa asignado pertenece al entrenador autenticado
-    if (assignedProgramId) {
-      const { data: programRow, error: programErr } = await adminClient
-        .from('programs')
-        .select('id, trainer_id')
-        .eq('id', assignedProgramId)
-        .maybeSingle();
-
-      if (programErr) {
-        console.error('Error al verificar ownership del programa:', programErr);
-        return new Response(
-          JSON.stringify({ error: 'No se pudo verificar el programa asignado.' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      if (!programRow || programRow.trainer_id !== callerUser.id) {
-        return new Response(
-          JSON.stringify({
-            error: 'Acceso denegado (403): el programa asignado no pertenece al entrenador autenticado.',
-          }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    // 5. Verificar si el email ya existe como cliente o como usuario
-    // A) En la tabla clients
-    const { data: existingClient } = await adminClient
-      .from('clients')
-      .select('id, email, name, status')
-      .ilike('email', cleanEmail)
-      .maybeSingle();
-
-    if (existingClient) {
-      return new Response(
-        JSON.stringify({
-          error: `El email ${cleanEmail} ya está registrado como cliente (${existingClient.name}, Estado: ${existingClient.status}).`,
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // B) En la tabla profiles / auth
-    const { data: existingProfile } = await adminClient
-      .from('profiles')
-      .select('id, email, role')
-      .ilike('email', cleanEmail)
-      .maybeSingle();
-
-    if (existingProfile) {
-      return new Response(
-        JSON.stringify({
-          error: `Ya existe un usuario en el sistema con el email ${cleanEmail} (Rol: ${existingProfile.role}).`,
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 6. Configurar la URL de redirección a la página de activación
-    const appUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL');
-    if (!appUrl) {
-      console.error('Faltan APP_URL o SITE_URL para construir el redirect de invitación');
-      return new Response(
-        JSON.stringify({ error: 'Configuración incompleta: falta APP_URL o SITE_URL.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    let authorizedAppUrl: string;
+    const baseUrl = Deno.env.get('APP_URL') || Deno.env.get('SITE_URL');
+    if (!baseUrl) return json({ error: 'La aplicación no tiene una URL de invitación configurada.' }, 500);
+    let redirectTo: string;
     try {
-      authorizedAppUrl = normalizeAuthorizedBaseUrl(appUrl);
-    } catch (configurationError) {
-      console.error('APP_URL/SITE_URL no es una base de aplicación válida:', configurationError);
-      return new Response(
-        JSON.stringify({ error: 'Configuración incompleta: APP_URL o SITE_URL no es válida.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      redirectTo = resolveAuthorizedRedirect(normalizeAuthorizedBaseUrl(baseUrl), body.redirectTo);
+    } catch {
+      return json({ error: 'La URL de redirección no está autorizada.' }, 400);
     }
 
-    let finalRedirectTo: string;
-    try {
-      finalRedirectTo = resolveAuthorizedRedirect(authorizedAppUrl, customRedirectTo);
-    } catch (redirectError) {
-      console.warn('Se rechazó un redirect de invitación no autorizado:', redirectError);
-      return new Response(
-        JSON.stringify({ error: 'La URL de redirección de la invitación no está autorizada para este entorno.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const correlationId = crypto.randomUUID();
+    const idempotencyKey = await sha256(JSON.stringify({ actor: user.id, email, name, objective, startDate, assignedProgramId }));
+    const { data: operation, error: operationError } = await adminClient.rpc('begin_client_invitation', {
+      p_actor_user_id: user.id,
+      p_target_email: email,
+      p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId,
+    });
+    if (operationError || !operation?.operation_id) {
+      console.error('invite-client operation could not be recorded', operationError?.code || 'ledger_start_failed');
+      return json({ error: 'No se pudo iniciar la invitación de forma segura.' }, 409);
     }
-
-    // 7. Enviar la invitación mediante supabase.auth.admin.inviteUserByEmail
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      cleanEmail,
-      {
-        redirectTo: finalRedirectTo,
-        data: {
-          full_name: cleanName,
-          role: 'client',
-          trainer_id: callerUser.id,
-        },
+    if (operation.replayed) {
+      if (['invited', 'accepted'].includes(operation.state) && operation.target_user_id) {
+        const { data: client, error: relationError } = await adminClient.from('clients')
+          .select('id,name,email,status,assigned_program_id,data').eq('user_id', operation.target_user_id).eq('trainer_id', user.id).maybeSingle();
+        if (!relationError && client) return json({ success: true, message: 'La invitación ya fue registrada.', client: client.data || client });
       }
-    );
-
-    if (inviteError) {
-      console.error('Error en inviteUserByEmail:', inviteError);
-      return new Response(
-        JSON.stringify({ error: `Error al enviar la invitación: ${inviteError.message}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return json({ error: 'Esta invitación ya está en curso o requiere revisión; no se ha reenviado.' }, 409);
     }
 
-    const invitedUserId = inviteData?.user?.id;
-    if (!invitedUserId) {
-      return new Response(
-        JSON.stringify({ error: 'No se pudo obtener el identificador del usuario invitado.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 8. Crear / Actualizar perfil en profiles
-    await adminClient.from('profiles').upsert(
-      {
-        id: invitedUserId,
-        email: cleanEmail,
-        full_name: cleanName,
-        role: 'client',
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    );
-
-    // 9. Insertar la fila en la tabla clients
-    const clientId = `cli-${invitedUserId.substring(0, 8)}`;
-    const initials = cleanName
-      .split(' ')
-      .map((w: string) => w[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || 'CL';
-
-    const fullClientPayload = {
-      id: clientId,
-      user_id: invitedUserId,
-      trainer_id: callerUser.id,
-      name: cleanName,
-      initials,
-      email: cleanEmail,
-      phone: '',
-      birthDate: '1995-01-01',
-      sex: 'Hombre',
-      height: '175 cm',
-      objective,
-      status: 'Pendiente',
-      startDate: startDate || new Date().toISOString().split('T')[0],
-      nextWorkout: 'Pendiente de activación',
-      adherencePercentage: 100,
-      completedWorkoutsCount: 0,
-      totalScheduledWorkoutsCount: 4,
-      currentWeight: 70.0,
-      initialWeight: 70.0,
-      targetWeight: 68.0,
-      weightWeeklyTrend: '→ 0,0 kg / semana',
-      lastCheckIn: 'Pendiente',
-      assignedProgramId,
-      metrics: {
-        stepsToday: 0,
-        stepsGoal: 9000,
-        kcalToday: 0,
-        kcalGoal: 2000,
-        sleepHours: '8h 00min',
-        sleepQuality: 'Buena',
-        waterLiters: 0,
-        waterGoal: 2.5,
-      },
-      weeklySchedule: [
-        { day: 'L', status: 'pending' },
-        { day: 'M', status: 'pending' },
-        { day: 'X', status: 'rest' },
-        { day: 'J', status: 'pending' },
-        { day: 'V', status: 'pending' },
-        { day: 'S', status: 'rest' },
-        { day: 'D', status: 'rest' },
-      ],
-      strengthProgression: [],
-      bodyMeasurements: { cintura: 80, cadera: 95, pecho: 98, brazo: 34, lastUpdated: 'Pendiente' },
-      impedanceHistory: [{ date: 'HOY', weight: 70.0, fatPercentage: 18.0, muscleMassKg: 55.0, waterPercentage: 55 }],
-      trainerNotes: [{ id: `tn-${Date.now()}`, date: 'Hoy', content: 'Invitación enviada por email.' }],
+    const finishOperation = async ({ state, targetUserId, errorCode }: { state: string; targetUserId: string | null; errorCode: string | null }) => {
+      const { data, error } = await adminClient.rpc('finish_client_invitation', {
+        p_operation_id: operation.operation_id,
+        p_target_user_id: targetUserId,
+        p_state: state,
+        p_safe_error_code: errorCode,
+        p_correlation_id: correlationId,
+      });
+      return { data, error };
     };
 
-    const clientDbRow = {
-      id: clientId,
-      user_id: invitedUserId,
-      trainer_id: callerUser.id,
-      name: cleanName,
-      email: cleanEmail,
-      phone: '',
-      sex: 'Hombre',
-      height: '175 cm',
-      objective,
-      status: 'Pendiente',
-      current_weight: 70.0,
-      adherence_percentage: 100,
-      assigned_program_id: assignedProgramId,
-      data: fullClientPayload,
-      updated_at: new Date().toISOString(),
-    };
+    const result = await runClientInvitation({
+      authorizeBeforeInvite: async () => {
+        const [{ data: currentProfile, error: currentProfileError }, { data: currentAccess, error: currentAccessError }] = await Promise.all([
+          adminClient.from('profiles').select('id,role').eq('id', user.id).maybeSingle(),
+          adminClient.from('account_access').select('state').eq('user_id', user.id).maybeSingle(),
+        ]);
+        if (currentProfileError || currentAccessError) return { ok: false };
+        return currentProfile?.role === 'trainer' && currentAccess?.state === 'enabled'
+          ? { ok: true }
+          : { ok: false };
+      },
+      inviteAuthUser: async () => {
+        const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
+          redirectTo,
+          data: { full_name: name },
+        });
+        if (error) return { error, errorCode: 'auth_invite_failed' };
+        return { user: data.user };
+      },
+      verifyPendingClient: async invitedUser => {
+        const { data: invitedProfile, error: invitedProfileError } = await adminClient.from('profiles')
+          .select('id,role').eq('id', invitedUser.id).maybeSingle();
+        const { data: invitedAccess, error: invitedAccessError } = await adminClient.from('account_access')
+          .select('state').eq('user_id', invitedUser.id).maybeSingle();
+        if (invitedProfileError || invitedAccessError) return { error: true };
+        return { profile: invitedProfile, access: invitedAccess };
+      },
+      persistClientRelation: async invitedUser => {
+        // Recheck the actor immediately before the privileged relation write.
+        const { data: latestActorAccess, error: latestAccessError } = await adminClient.from('account_access')
+          .select('state').eq('user_id', user.id).maybeSingle();
+        const { data: latestActorProfile, error: latestProfileError } = await adminClient.from('profiles')
+          .select('id,role').eq('id', user.id).maybeSingle();
+        if (latestAccessError || latestProfileError
+          || latestActorAccess?.state !== 'enabled'
+          || latestActorProfile?.role !== 'trainer') return { error: true };
 
-    const { data: insertedClient, error: clientInsertError } = await adminClient
-      .from('clients')
-      .upsert(clientDbRow, { onConflict: 'email' })
-      .select()
-      .single();
+        const clientId = `cli-${crypto.randomUUID()}`;
+        const clientData = {
+          id: clientId,
+          user_id: invitedUser.id,
+          trainer_id: user.id,
+          name,
+          email,
+          objective,
+          status: 'Pendiente',
+          startDate,
+          assignedProgramId,
+          adherencePercentage: 100,
+          completedWorkoutsCount: 0,
+          totalScheduledWorkoutsCount: 0,
+          metrics: {},
+          weeklySchedule: [],
+          trainerNotes: [],
+        };
+        const { data, error } = await adminClient.from('clients').insert({
+          id: clientId,
+          user_id: invitedUser.id,
+          trainer_id: user.id,
+          name,
+          email,
+          objective,
+          status: 'Pendiente',
+          assigned_program_id: assignedProgramId,
+          data: clientData,
+        }).select('id,name,email,status,assigned_program_id,data').single();
+        return { data: data?.data || data, error };
+      },
+      finishOperation,
+    });
 
-    if (clientInsertError) {
-      console.error('Error insertando en clients:', clientInsertError);
-      return new Response(
-        JSON.stringify({
-          error: `Invitación enviada en Auth, pero falló el registro en la tabla clients: ${clientInsertError.message}`,
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!result.success) {
+      return json({ error: 'No se pudo completar la invitación. El estado quedó registrado para revisión.' }, result.status || 500);
     }
-
-    // 10. Devolver respuesta exitosa
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Invitación enviada con éxito a ${cleanEmail}`,
-        userId: invitedUserId,
-        client: insertedClient?.data || fullClientPayload,
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (err: any) {
-    console.error('Error inesperado en invite-client:', err);
-    return new Response(
-      JSON.stringify({ error: err.message || 'Error interno del servidor en Edge Function' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return json({
+      success: true,
+      message: 'Invitación enviada correctamente.',
+      client: result.client,
+    });
+  } catch {
+    console.error('invite-client unexpected failure');
+    return json({ error: 'No se pudo completar la invitación. Inténtalo de nuevo más tarde.' }, 500);
   }
 });

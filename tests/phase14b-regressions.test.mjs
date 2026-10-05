@@ -101,8 +101,8 @@ test('invite redirect rejects fragments so Auth can append its session fragment'
 
 test('invite-client validates redirect before sending the invitation', () => {
   const source = readFileSync(new URL('../supabase/functions/invite-client/index.ts', import.meta.url), 'utf8');
-  assert.ok(source.indexOf('resolveAuthorizedRedirect(authorizedAppUrl, customRedirectTo)') < source.indexOf('adminClient.auth.admin.inviteUserByEmail('));
-  assert.match(source, /La URL de redirección de la invitación no está autorizada para este entorno\./);
+  assert.ok(source.indexOf('resolveAuthorizedRedirect(normalizeAuthorizedBaseUrl(baseUrl), body.redirectTo)') < source.indexOf('adminClient.auth.admin.inviteUserByEmail('));
+  assert.match(source, /La URL de redirección no está autorizada\./);
 });
 
 test('trainer invitation only selects owned programs and fails closed without one', () => {
@@ -118,8 +118,8 @@ test('trainer invitation only selects owned programs and fails closed without on
   assert.match(invite, /!trainerPrograms\.some\(program => program\.id === assignedProgram\)/);
   assert.doesNotMatch(edgeFunction, /rawAssignedProgramId \|\| 'prog-1'/);
   assert.match(edgeFunction, /if \(!assignedProgramId\)/);
-  assert.match(edgeFunction, /programRow\.trainer_id !== callerUser\.id/);
-  assert.ok(edgeFunction.indexOf('programRow.trainer_id !== callerUser.id') < edgeFunction.indexOf('adminClient.auth.admin.inviteUserByEmail('));
+  assert.match(edgeFunction, /\.eq\('trainer_id', user\.id\)/);
+  assert.ok(edgeFunction.indexOf(".eq('trainer_id', user.id)") < edgeFunction.indexOf('adminClient.auth.admin.inviteUserByEmail('));
 });
 
 test('successful trainer invitation refreshes existing clients without a second writer', async () => {

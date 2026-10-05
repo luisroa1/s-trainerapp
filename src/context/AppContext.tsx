@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
 import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
 import { resolveProfileRole } from '../lib/profileRole.mjs';
+import { resolveAccountAccess } from '../lib/accountAccessState.mjs';
 
 const INITIAL_TRAINER: TrainerProfile = {
   id: '',
@@ -47,20 +48,15 @@ interface AppContextType {
   userRole: UserRole | null;
   isAdmin: boolean;
   authLoading: boolean;
+  accountAccessStatus: 'idle' | 'loading' | 'enabled' | 'pending' | 'suspended' | 'error';
+  accountAccessError: string | null;
+  retryAccountAccessResolution: () => Promise<void>;
   profileRoleStatus: 'idle' | 'loading' | 'resolved' | 'error';
   profileRoleError: string | null;
   retryProfileRoleResolution: () => Promise<void>;
   supabaseStatus: SupabaseStatus;
   isRealtimeActive: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: UserRole }>;
-  signUp: (params: { 
-    email: string; 
-    password: string; 
-    role: UserRole; 
-    name?: string; 
-    phone?: string; 
-    avatarUrl?: string;
-  }) => Promise<{ success: boolean; error?: string; message?: string }>;
   signOut: () => Promise<void>;
   refreshFromSupabase: (authenticatedUserId?: string, authenticatedRole?: UserRole | null) => Promise<void>;
 }
@@ -152,9 +148,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
   const [supabaseSession, setSupabaseSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [accountAccessStatus, setAccountAccessStatus] = useState<'idle' | 'loading' | 'enabled' | 'pending' | 'suspended' | 'error'>('loading');
+  const [accountAccessError, setAccountAccessError] = useState<string | null>(null);
   const [profileRoleStatus, setProfileRoleStatus] = useState<'idle' | 'loading' | 'resolved' | 'error'>('loading');
   const [profileRoleError, setProfileRoleError] = useState<string | null>(null);
   const profileRoleRequest = useRef(0);
+  const accountAccessRequest = useRef(0);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>('connecting');
   const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
@@ -381,8 +380,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const loadAccountAccess = async (userId: string) => {
+    const request = ++accountAccessRequest.current;
+    setAccountAccessStatus('loading');
+    setAccountAccessError(null);
+    try {
+      const { data, error } = await supabase
+        .from('account_access')
+        .select('state')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const state = resolveAccountAccess({ row: data, error });
+      if (request !== accountAccessRequest.current) return 'error';
+      setAccountAccessStatus(state);
+      if (state === 'error') {
+        setAccountAccessError('No se pudo verificar el acceso de esta cuenta. Reintenta o cierra sesión.');
+      }
+      if (state !== 'enabled') {
+        profileRoleRequest.current += 1;
+        setUserRole(null);
+        setProfileRoleStatus('idle');
+      }
+      return state;
+    } catch {
+      if (request === accountAccessRequest.current) {
+        setAccountAccessStatus('error');
+        setAccountAccessError('No se pudo verificar el acceso de esta cuenta. Reintenta o cierra sesión.');
+        setUserRole(null);
+        setProfileRoleStatus('idle');
+      }
+      return 'error';
+    }
+  };
+
   const retryProfileRoleResolution = async () => {
     if (!supabaseUser?.id) return;
+    const accessState = await loadAccountAccess(supabaseUser.id);
+    if (accessState !== 'enabled') return;
+    const { profile, role } = await loadProfileRole(supabaseUser.id);
+    if (!role || !profile) return;
+    if (role === 'client') await loadRealClientForUser(supabaseUser.id);
+    await refreshFromSupabase(supabaseUser.id, role);
+  };
+
+  const retryAccountAccessResolution = async () => {
+    if (!supabaseUser?.id) return;
+    const accessState = await loadAccountAccess(supabaseUser.id);
+    if (accessState !== 'enabled') return;
     const { profile, role } = await loadProfileRole(supabaseUser.id);
     if (!role || !profile) return;
     if (role === 'client') await loadRealClientForUser(supabaseUser.id);
@@ -433,12 +477,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Get initial session after processing a callback, if present.
     establishCallbackSession().then(async ({ data: { session }, error }) => {
       if (!isMounted) return;
-      setAuthLoading(false);
       if (session?.user) {
         setSupabaseSession(session);
         setSupabaseUser(session.user);
         try {
-          const { profile, role } = await loadProfileRole(session.user.id);
+          const accessState = await loadAccountAccess(session.user.id);
+          const { profile, role } = accessState === 'enabled'
+            ? await loadProfileRole(session.user.id)
+            : { profile: null, role: null };
 
           if (isMounted && role && profile) {
 
@@ -466,7 +512,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else {
         profileRoleRequest.current += 1;
+        accountAccessRequest.current += 1;
         setUserRole(null);
+        setAccountAccessStatus('idle');
+        setAccountAccessError(null);
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
       }
@@ -480,7 +529,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
         try {
-          const { profile, role } = await loadProfileRole(session.user.id);
+          const accessState = await loadAccountAccess(session.user.id);
+          const { profile, role } = accessState === 'enabled'
+            ? await loadProfileRole(session.user.id)
+            : { profile: null, role: null };
 
           if (isMounted && role && profile) {
 
@@ -516,7 +568,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else {
         profileRoleRequest.current += 1;
+        accountAccessRequest.current += 1;
         setUserRole(null);
+        setAccountAccessStatus('idle');
+        setAccountAccessError(null);
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
         setTrainer(INITIAL_TRAINER);
@@ -610,6 +665,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupabaseUser(data.user);
       setSupabaseSession(data.session);
 
+      const accessState = await loadAccountAccess(data.user.id);
+      if (accessState !== 'enabled') {
+        setAuthLoading(false);
+        return { success: false, error: accessState === 'error'
+          ? 'No se pudo verificar el acceso de esta cuenta.'
+          : 'Esta cuenta todavía no tiene acceso habilitado.' };
+      }
+
       const { profile, role } = await loadProfileRole(data.user.id);
       if (!role || !profile) {
         setAuthLoading(false);
@@ -641,139 +704,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const signUp = async (params: {
-    email: string;
-    password: string;
-    role: UserRole;
-    name?: string;
-    phone?: string;
-    avatarUrl?: string;
-  }): Promise<{ success: boolean; error?: string; message?: string }> => {
-    try {
-      setAuthLoading(true);
-      const { email, password, role, name, phone, avatarUrl } = params;
-
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            role,
-            full_name: name || '',
-            phone: phone || '',
-            avatar_url: avatarUrl || '',
-          },
-        },
-      });
-
-      if (error) {
-        setAuthLoading(false);
-        return { success: false, error: error.message };
-      }
-
-      const createdUser = data.user;
-      // The selected signup role is user input. Only profiles.role may grant an app role.
-      setUserRole(null);
-      setProfileRoleStatus(data.session ? 'loading' : 'idle');
-      localStorage.removeItem('strainer_user_role');
-
-      // If registered as trainer, update trainer profile
-      if (role === 'trainer') {
-        const updatedTrainer: TrainerProfile = {
-          ...trainer,
-          name: name || trainer.name,
-          email: email.trim(),
-          avatarUrl: avatarUrl || trainer.avatarUrl,
-        };
-        updateTrainer(updatedTrainer);
-        supabaseDb.upsertTrainerProfile(updatedTrainer).catch(() => {});
-      } else {
-        // Registered as client: create client profile entry
-        const initials = (name || 'NC')
-          .split(' ')
-          .map(w => w[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase();
-
-        const newClient: ClientData = {
-          id: `cli-${Date.now()}`,
-          name: name || 'Nuevo Cliente',
-          initials,
-          email: email.trim(),
-          phone: phone || '',
-          birthDate: '1995-01-01',
-          sex: 'Hombre',
-          height: '175 cm',
-          objective: 'Hipertrofia',
-          status: 'Activo',
-          nextWorkout: 'Hoy · Sesión 1',
-          adherencePercentage: 100,
-          completedWorkoutsCount: 0,
-          totalScheduledWorkoutsCount: 4,
-          currentWeight: 75.0,
-          initialWeight: 75.0,
-          targetWeight: 72.0,
-          weightWeeklyTrend: '→ 0,0 kg / semana',
-          lastCheckIn: 'Hoy',
-          avatarUrl: avatarUrl || '',
-          pathologies: {
-            hasLimitations: false,
-            training: 'Sin limitaciones articulares.',
-            nutrition: 'Sin restricciones.'
-          },
-          menstrualTracking: {
-            enabled: false,
-            sharedWithTrainer: false,
-            day: 0,
-            phase: 'Folicular',
-            advice: ''
-          },
-          metrics: {
-            stepsToday: 3500,
-            stepsGoal: 9000,
-            kcalToday: 1100,
-            kcalGoal: 2200,
-            sleepHours: '7h 30min',
-            sleepQuality: 'Buena',
-            waterLiters: 1.5,
-            waterGoal: 2.5
-          },
-          assignedProgramId: '',
-          weeklySchedule: [
-            { day: 'L', status: 'completed' },
-            { day: 'M', status: 'pending' },
-            { day: 'X', status: 'rest' },
-            { day: 'J', status: 'pending' },
-            { day: 'V', status: 'pending' },
-            { day: 'S', status: 'rest' },
-            { day: 'D', status: 'rest' },
-          ],
-          strengthProgression: [],
-          bodyMeasurements: { cintura: 80, cadera: 95, pecho: 98, brazo: 34, lastUpdated: 'Hoy' },
-          impedanceHistory: [{ date: 'HOY', weight: 75.0, fatPercentage: 18.0, muscleMassKg: 58.0, waterPercentage: 55 }],
-          trainerNotes: [{ id: `tn-${Date.now()}`, date: 'Hoy', content: 'Cuenta de cliente registrada y activada en Supabase.' }]
-        };
-
-        setClients(prev => [newClient, ...prev]);
-        setActiveClientId(newClient.id);
-        supabaseDb.upsertClient(newClient).catch(() => {});
-      }
-
-      setAuthLoading(false);
-      const isConfirmed = createdUser?.identities && createdUser.identities.length > 0;
-      return { 
-        success: true, 
-        message: isConfirmed ? 'Cuenta creada y sesión iniciada con éxito en Supabase.' : 'Cuenta creada en Supabase. Si tienes confirmación de email activada, revisa tu bandeja de entrada.'
-      };
-    } catch (err: any) {
-      setAuthLoading(false);
-      return { success: false, error: err.message || 'Error al registrarse' };
-    }
-  };
-
   const signOut = async () => {
     profileRoleRequest.current += 1;
+    accountAccessRequest.current += 1;
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -782,6 +715,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSupabaseUser(null);
     setSupabaseSession(null);
     setUserRole(null);
+    setAccountAccessStatus('idle');
+    setAccountAccessError(null);
     setProfileRoleStatus('idle');
     setProfileRoleError(null);
     setRealClient(null);
@@ -1023,13 +958,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userRole,
         isAdmin,
         authLoading,
+        accountAccessStatus,
+        accountAccessError,
+        retryAccountAccessResolution,
         profileRoleStatus,
         profileRoleError,
         retryProfileRoleResolution,
         supabaseStatus,
         isRealtimeActive,
         signIn,
-        signUp,
         signOut,
         refreshFromSupabase
       }}

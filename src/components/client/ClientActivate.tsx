@@ -23,7 +23,7 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
   onFinishActivation,
   onGoToLogin 
 }) => {
-  const { appName, updateClient, refreshFromSupabase } = useApp();
+  const { appName, refreshFromSupabase } = useApp();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -141,12 +141,7 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
 
     try {
       // 1. Actualizar contraseña del usuario en Supabase Auth
-      const { data, error } = await supabase.auth.updateUser({
-        password: password,
-        data: {
-          status: 'Activo',
-        },
-      });
+      const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
         setIsLoading(false);
@@ -168,7 +163,6 @@ export const ClientActivate: React.FC<ClientActivateProps> = ({
         return;
       }
 
-      updateClient(edgeData.client.id, { status: 'Activo' });
 
       window.history.replaceState(
         null,

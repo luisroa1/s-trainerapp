@@ -1,4 +1,3 @@
-export const STAGING_PROJECT_REF = 'qgppeyplrrgiedsvsvst';
 export const PRODUCTION_PROJECT_REF = 'rfxyisqvrukslnlgzzek';
 
 function jwtRole(key) {
@@ -17,11 +16,8 @@ function validatePublishableKey(key) {
   if (!key || key.startsWith('REPLACE_WITH_')) {
     throw new Error('Configura VITE_SUPABASE_ANON_KEY con la clave publicable del entorno.');
   }
-  if (key.startsWith('sb_secret_') || jwtRole(key) === 'service_role') {
-    throw new Error('Build cancelado: no se permite una clave Supabase secreta/service_role en el frontend.');
-  }
   if (!key.startsWith('sb_publishable_') && jwtRole(key) !== 'anon') {
-    throw new Error('Build cancelado: la clave Supabase debe ser publicable o una clave anon heredada.');
+    throw new Error('La clave Supabase debe ser publicable o una clave anon heredada.');
   }
 }
 
@@ -50,24 +46,25 @@ export function validateSupabaseTarget({ appTarget, supabaseUrl, publishableKey 
     throw new Error('VITE_SUPABASE_URL debe ser el origen del proyecto, sin path, query ni fragmento.');
   }
 
-  const expectedProjectRef = appTarget === 'staging'
-    ? STAGING_PROJECT_REF
-    : appTarget === 'production'
-      ? PRODUCTION_PROJECT_REF
-      : null;
+  const isSupabaseProject = parsedUrl.hostname.endsWith('.supabase.co')
+    && parsedUrl.hostname.split('.').length === 3
+    && parsedUrl.hostname.split('.')[0].length > 0;
 
-  if (expectedProjectRef && parsedUrl.hostname !== `${expectedProjectRef}.supabase.co`) {
-    throw new Error(`Configuración ${appTarget} rechazada: solo se permite el proyecto Supabase aprobado ${expectedProjectRef}.`);
+  if (appTarget === 'production' && parsedUrl.hostname !== `${PRODUCTION_PROJECT_REF}.supabase.co`) {
+    throw new Error(`Configuración production rechazada: solo se permite el proyecto Supabase aprobado ${PRODUCTION_PROJECT_REF}.`);
   }
-  if (appTarget === 'local' && [STAGING_PROJECT_REF, PRODUCTION_PROJECT_REF].includes(parsedUrl.hostname.split('.')[0])) {
-    throw new Error('Configuración local rechazada: no puede apuntar a staging ni a producción.');
+  if (appTarget === 'staging' && (!isSupabaseProject || parsedUrl.hostname === `${PRODUCTION_PROJECT_REF}.supabase.co`)) {
+    throw new Error('Configuración staging rechazada: se requiere un proyecto Supabase dedicado distinto de producción.');
+  }
+  if (appTarget === 'local' && !isLoopback) {
+    throw new Error('Configuración local rechazada: solo se permite Supabase local en localhost.');
   }
 
   return {
     supabaseUrl: parsedUrl.origin,
-    projectRef: expectedProjectRef ?? (parsedUrl.hostname.endsWith('.supabase.co')
+    projectRef: parsedUrl.hostname.endsWith('.supabase.co')
       ? parsedUrl.hostname.slice(0, -'.supabase.co'.length)
-      : null),
+      : null,
     publishableKey,
   };
 }

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { PRODUCTION_PROJECT_REF, STAGING_PROJECT_REF, validateSupabaseTarget } from '../src/lib/supabaseTarget.mjs';
+import { PRODUCTION_PROJECT_REF, validateSupabaseTarget } from '../src/lib/supabaseTarget.mjs';
 
 const productionUrl = `https://${PRODUCTION_PROJECT_REF}.supabase.co`;
-const stagingUrl = `https://${STAGING_PROJECT_REF}.supabase.co`;
+const stagingUrl = 'https://staging-fixture.supabase.co';
 const publishableKey = 'sb_publishable_synthetic_test_key';
 
 test('production target accepts only the explicitly allowlisted production project', () => {
@@ -36,18 +36,21 @@ test('frontend target rejects Supabase secret and service_role keys', () => {
   const serviceRolePayload = Buffer.from(JSON.stringify({ role: 'service_role' })).toString('base64url');
   assert.throws(() => validateSupabaseTarget({
     appTarget: 'production', supabaseUrl: productionUrl, publishableKey: 'sb_secret_never_allowed',
-  }), /no se permite una clave Supabase secreta/);
+  }), /clave Supabase debe ser publicable/);
   assert.throws(() => validateSupabaseTarget({
     appTarget: 'production', supabaseUrl: productionUrl, publishableKey: `header.${serviceRolePayload}.signature`,
-  }), /no se permite una clave Supabase secreta/);
+  }), /clave Supabase debe ser publicable/);
 });
 
-test('staging remains pinned to the isolated project and local target cannot use either hosted target', () => {
+test('staging accepts only a dedicated hosted Supabase project and local target requires loopback', () => {
   assert.equal(validateSupabaseTarget({
     appTarget: 'staging', supabaseUrl: stagingUrl, publishableKey,
-  }).projectRef, STAGING_PROJECT_REF);
+  }).projectRef, 'staging-fixture');
   assert.throws(() => validateSupabaseTarget({
     appTarget: 'staging', supabaseUrl: productionUrl, publishableKey,
+  }), /Configuración staging rechazada/);
+  assert.throws(() => validateSupabaseTarget({
+    appTarget: 'staging', supabaseUrl: 'https://example.com', publishableKey,
   }), /Configuración staging rechazada/);
   assert.throws(() => validateSupabaseTarget({
     appTarget: 'local', supabaseUrl: stagingUrl, publishableKey,
@@ -55,6 +58,15 @@ test('staging remains pinned to the isolated project and local target cannot use
   assert.throws(() => validateSupabaseTarget({
     appTarget: 'local', supabaseUrl: productionUrl, publishableKey,
   }), /Configuración local rechazada/);
+  assert.equal(validateSupabaseTarget({
+    appTarget: 'local', supabaseUrl: 'http://127.0.0.1:54321', publishableKey,
+  }).projectRef, null);
+});
+
+test('browser target validator has no environment-specific staging reference or privileged-key markers', () => {
+  const validator = readFileSync(new URL('../src/lib/supabaseTarget.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(validator, /STAGING_PROJECT_REF|service_role|sb_secret_/);
+  assert.match(validator, /PRODUCTION_PROJECT_REF/);
 });
 
 test('production workflow is manual, main-only, gated by the protected environment, and runs checks first', () => {

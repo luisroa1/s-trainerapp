@@ -5,6 +5,7 @@
 DO $preflight$
 DECLARE
   v_has_assignments boolean := to_regclass('public.client_program_assignments') IS NOT NULL;
+  v_assignment_conflict boolean;
 BEGIN
   IF to_regclass('public.clients') IS NULL
      OR to_regclass('public.programs') IS NULL
@@ -27,15 +28,20 @@ BEGIN
     RAISE EXCEPTION 'CORE 1C cannot baseline an invalid, cross-owner, or unversioned legacy assignment.';
   END IF;
 
-  IF v_has_assignments AND EXISTS (
-    SELECT 1
-    FROM public.client_program_assignments a
-    JOIN public.program_versions pv ON pv.id = a.program_version_id
-    JOIN public.clients c ON c.id = a.client_id
-    WHERE a.ended_at IS NULL
-      AND c.assigned_program_id IS DISTINCT FROM pv.program_id
-  ) THEN
-    RAISE EXCEPTION 'CORE 1C found an active assignment that disagrees with the legacy projection.';
+  IF v_has_assignments THEN
+    EXECUTE $existing_assignments$
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.client_program_assignments a
+        JOIN public.program_versions pv ON pv.id = a.program_version_id
+        JOIN public.clients c ON c.id = a.client_id
+        WHERE a.ended_at IS NULL
+          AND c.assigned_program_id IS DISTINCT FROM pv.program_id
+      )
+    $existing_assignments$ INTO v_assignment_conflict;
+    IF v_assignment_conflict THEN
+      RAISE EXCEPTION 'CORE 1C found an active assignment that disagrees with the legacy projection.';
+    END IF;
   END IF;
 END;
 $preflight$;

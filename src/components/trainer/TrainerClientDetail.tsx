@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ArrowLeft, 
   MessageSquare, 
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ClientData } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { supabaseDb } from '../../lib/supabase';
 
 interface TrainerClientDetailProps {
   client: ClientData;
@@ -27,7 +28,13 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
   onEditProgram,
   onEditNutrition
 }) => {
-  const { addTrainerNote } = useApp();
+  const { addTrainerNote, programs, applyProgramToClient } = useApp();
+  const [activeAssignment, setActiveAssignment] = useState<any | null>(null);
+  const [assignmentStatus, setAssignmentStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
+  const [selectedProgramId, setSelectedProgramId] = useState('');
+  const [isApplying, setIsApplying] = useState(false);
   const [activeTab, setActiveTab] = useState<'Entrenamientos' | 'Peso' | 'Medidas' | 'Fuerza' | 'Nutrición' | 'Actividad' | 'Fotos' | 'Notas'>('Entrenamientos');
   const [newNoteText, setNewNoteText] = useState('');
   const [showMessageModal, setShowMessageModal] = useState(false);
@@ -36,6 +43,44 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
     { sender: 'trainer', text: '¡Hola! ¿Cómo sentiste el press inclinado en la sesión de hoy?', time: 'Ayer 18:30' },
     { sender: 'client', text: 'Bastante bien, con el banco a 30º el hombro no molestó nada.', time: 'Ayer 19:15' }
   ]);
+
+  const refreshAssignment = async () => {
+    setAssignmentStatus('loading');
+    setAssignmentError(null);
+    const { data, error } = await supabaseDb.getActiveProgramAssignment(client.id);
+    if (error) {
+      setActiveAssignment(null);
+      setAssignmentStatus('error');
+      setAssignmentError('No se pudo consultar la prescripción actual.');
+      return;
+    }
+    setActiveAssignment(data);
+    setSelectedProgramId(data?.program_version.program_id || '');
+    setAssignmentStatus('loaded');
+  };
+
+  useEffect(() => {
+    void refreshAssignment();
+  }, [client.id]);
+
+  const activeProgramId = activeAssignment?.program_version?.program_id || '';
+  const activeProgram = programs.find(program => program.id === activeProgramId) || null;
+
+  const handleApplyProgram = async () => {
+    if (isApplying || assignmentStatus !== 'loaded') return;
+    setIsApplying(true);
+    setAssignmentMessage(null);
+    setAssignmentError(null);
+    try {
+      await applyProgramToClient(client.id, selectedProgramId || null);
+      await refreshAssignment();
+      setAssignmentMessage(selectedProgramId ? 'Prescripción aplicada al cliente.' : 'El cliente ya no tiene un programa asignado.');
+    } catch (error) {
+      setAssignmentError(error instanceof Error ? error.message : 'No se pudo aplicar la prescripción.');
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   const handleAddNote = () => {
     if (!newNoteText.trim()) return;
@@ -95,7 +140,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
               )}
             </div>
             <p className="text-xs text-[#8E8E94] mt-0.5">
-              {client.objective} · Programa: Pérdida de grasa — Fase 1
+              {client.objective || 'Sin objetivo registrado'} · {activeProgram?.name || 'Sin programa asignado'}
             </p>
           </div>
         </div>
@@ -118,16 +163,30 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
             <span>Plan nutricional</span>
           </button>
 
-          <button
-            onClick={() => onEditProgram(client.assignedProgramId)}
-            style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-            className="px-5 py-2.5 rounded-full font-bold text-xs shadow-md flex items-center gap-2 transition-all active:scale-95"
-          >
-            <Dumbbell className="w-4 h-4 stroke-[2.5]" />
-            <span>Editar programa</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <select aria-label="Programa para aplicar a este cliente" value={selectedProgramId}
+              onChange={event => setSelectedProgramId(event.target.value)}
+              disabled={assignmentStatus !== 'loaded' || isApplying}
+              className="max-w-56 px-3 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0]">
+              <option value="">Sin programa asignado</option>
+              {programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
+            </select>
+            <button onClick={() => void handleApplyProgram()}
+              disabled={assignmentStatus !== 'loaded' || isApplying || (!selectedProgramId && !activeProgramId)}
+              style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
+              className="px-4 py-2.5 rounded-full font-bold text-xs shadow-md flex items-center gap-2 disabled:opacity-50">
+              <Dumbbell className="w-4 h-4 stroke-[2.5]" />
+              <span>{isApplying ? 'Aplicando…' : selectedProgramId ? 'Aplicar a cliente' : 'Quitar programa'}</span>
+            </button>
+            {activeProgram && <button onClick={() => onEditProgram(activeProgram.id)}
+              className="px-4 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0]">Editar programa</button>}
+          </div>
         </div>
       </div>
+
+      {assignmentStatus === 'loading' && <p role="status" className="mb-4 text-xs text-[#8E8E94]">Consultando la prescripción actual…</p>}
+      {assignmentError && <p role="alert" className="mb-4 text-xs text-red-300">{assignmentError}</p>}
+      {assignmentMessage && <p role="status" className="mb-4 text-xs text-emerald-300">{assignmentMessage}</p>}
 
       {/* PATOLOGÍAS Y LIMITACIONES (Apartado fijo) */}
       <div className="mb-4">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, X, Play, MessageSquare, Check, Clock, Minus, Plus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { WorkoutSetRecord, ProgramDay } from '../../types';
+import { programFromActiveAssignment } from '../../lib/clientProgramAssignment.mjs';
 
 // Descanso estándar entre series (antes 120s / 2:00, ahora 90s / 1:30)
 const STANDARD_REST_SECONDS = 90;
@@ -59,7 +60,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
   progress,
   onProgressChange
 }) => {
-  const { activeClient, programs, updateClient } = useApp();
+  const { activeClient, activeProgramAssignment, activeProgramAssignmentStatus, activeProgramAssignmentError, updateClient } = useApp();
   const { currentExerciseIndex, activeSetIndex, completedSets } = progress;
 
   // Resuelve el día de hoy con el mismo calendario semanal que ya usa
@@ -70,7 +71,9 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
   const todaySchedule = activeClient.weeklySchedule.find(s => s.day === todayLetter);
   const isRestDay = !todaySchedule || todaySchedule.status === 'rest';
 
-  const assignedProgram = programs.find(p => p.id === activeClient.assignedProgramId);
+  const assignedProgram = programFromActiveAssignment(activeProgramAssignment) as {
+    id: string; versionId: string; versionNumber: number; days: ProgramDay[];
+  } | null;
 
   // El nº de día de entrenamiento (excluyendo descansos) determina qué
   // ProgramDay corresponde a hoy: p.ej. si X es descanso, J es el tercer
@@ -126,6 +129,16 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({
     }, 2500);
     return () => clearTimeout(timer);
   }, [workoutCompleteScreen]);
+
+  if (activeProgramAssignmentStatus === 'loading') {
+    return <div role="status" className="min-h-full p-8 text-sm text-[#8E8E94]">Cargando tu prescripción…</div>;
+  }
+  if (activeProgramAssignmentStatus === 'error') {
+    return <div role="alert" className="min-h-full p-8 text-sm text-red-300">{activeProgramAssignmentError || 'No se pudo cargar tu prescripción.'}</div>;
+  }
+  if (!activeProgramAssignment) {
+    return <div className="min-h-full p-8 text-center text-sm text-[#8E8E94]">No tienes un programa asignado.</div>;
+  }
 
   const allSetsCompleted = targetSets > 0 && completedSets.length >= targetSets;
   const hasNextExercise = currentExerciseIndex + 1 < totalExercises;

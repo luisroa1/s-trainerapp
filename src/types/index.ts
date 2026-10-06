@@ -48,6 +48,22 @@ export interface Program {
   days: ProgramDay[];
 }
 
+export interface ActiveProgramAssignment {
+  id: string;
+  client_id: string;
+  program_version_id: string;
+  assigned_by: string | null;
+  assigned_at: string;
+  ended_at: null;
+  program_version: {
+    id: string;
+    program_id: string;
+    version_number: number;
+    snapshot: { schema_version: number; days: unknown[] };
+    created_at: string;
+  };
+}
+
 export interface TrainerProfile {
   id: string;
   name: string;

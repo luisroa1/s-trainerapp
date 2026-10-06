@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
+import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
 import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
 import { resolveProfileRole } from '../lib/profileRole.mjs';
 import { resolveAccountAccess } from '../lib/accountAccessState.mjs';
@@ -28,6 +28,9 @@ interface AppContextType {
   setActiveClientId: (id: string) => void;
   loadRealClientForUser?: (userId: string) => Promise<ClientData | null>;
   programs: Program[];
+  activeProgramAssignment: ActiveProgramAssignment | null;
+  activeProgramAssignmentStatus: 'idle' | 'loading' | 'loaded' | 'error';
+  activeProgramAssignmentError: string | null;
   nutritionPlans: Record<string, NutritionPlan>;
   accentColor: AccentColor;
   setAccentColor: (color: AccentColor) => void;
@@ -36,7 +39,7 @@ interface AppContextType {
   addClient: (client: Partial<ClientData>) => void;
   addTrainerNote: (clientId: string, content: string) => void;
   saveProgram: (program: Program) => Promise<void>;
-  applyProgramVersion: (programId: string) => Promise<{ id: string; version_number: number }>;
+  applyProgramToClient: (clientId: string, programId: string | null) => Promise<any>;
   updateNutritionPlan: (clientId: string, plan: NutritionPlan) => Promise<void>;
   toggleMealCompleted: (clientId: string, mealId: string) => Promise<void>;
   toggleShoppingItem: (clientId: string, category: string, itemName: string) => Promise<void>;
@@ -107,6 +110,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [activeClientId, setActiveClientId] = useState<string>('');
   const [realClient, setRealClient] = useState<ClientData | null>(null);
+  const [activeProgramAssignment, setActiveProgramAssignment] = useState<ActiveProgramAssignment | null>(null);
+  const [activeProgramAssignmentStatus, setActiveProgramAssignmentStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [activeProgramAssignmentError, setActiveProgramAssignmentError] = useState<string | null>(null);
+  const activeAssignmentRequest = useRef(0);
 
   const [programs, setPrograms] = useState<Program[]>(() => {
     const saved = localStorage.getItem('strainer_programs');
@@ -248,7 +255,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!client.id && data.id) client.id = data.id;
       if (!client.email && data.email) client.email = data.email;
       if (!client.name && data.name) client.name = data.name;
-      if (!client.assignedProgramId && data.assigned_program_id) client.assignedProgramId = data.assigned_program_id;
       if (!client.trainerId && data.trainer_id) client.trainerId = data.trainer_id;
       if (!client.weeklySchedule) client.weeklySchedule = [];
       if (!client.metrics) {
@@ -313,17 +319,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // Trainers load only their own programs. Clients load only programs
-      // belonging to the trainer linked to their client row.
-      let programOwnerId = authenticatedUserId || '';
-      if (authenticatedRole === 'client' && authenticatedUserId) {
-        const { data: clientLink, error: clientLinkError } = await supabase
-          .from('clients')
-          .select('trainer_id')
-          .eq('user_id', authenticatedUserId)
-          .maybeSingle();
-        programOwnerId = clientLinkError ? '' : (clientLink?.trainer_id || '');
-      }
+      // Client prescription data is loaded only through its active assignment
+      // and immutable program-version snapshot, never through programs.data.
+      const programOwnerId = authenticatedRole === 'trainer' ? authenticatedUserId || '' : '';
 
       activeProgramOwnerId.current = programOwnerId || null;
       if (programOwnerId) {
@@ -349,6 +347,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Error refreshing from Supabase:', e);
     }
   }, [clients, programs, supabaseUser?.id]);
+
+  useEffect(() => {
+    const request = ++activeAssignmentRequest.current;
+    if (userRole !== 'client' || !realClient?.id || accountAccessStatus !== 'enabled') {
+      setActiveProgramAssignment(null);
+      setActiveProgramAssignmentStatus('idle');
+      setActiveProgramAssignmentError(null);
+      return;
+    }
+
+    setActiveProgramAssignment(null);
+    setActiveProgramAssignmentStatus('loading');
+    setActiveProgramAssignmentError(null);
+    supabaseDb.getActiveProgramAssignment(realClient.id).then(({ data, error }) => {
+      if (request !== activeAssignmentRequest.current) return;
+      if (error) {
+        setActiveProgramAssignmentStatus('error');
+        setActiveProgramAssignmentError('No se pudo cargar la prescripción asignada. Reintenta más tarde.');
+        return;
+      }
+      setActiveProgramAssignment(data);
+      setActiveProgramAssignmentStatus('loaded');
+    }).catch(() => {
+      if (request !== activeAssignmentRequest.current) return;
+      setActiveProgramAssignmentStatus('error');
+      setActiveProgramAssignmentError('No se pudo cargar la prescripción asignada. Reintenta más tarde.');
+    });
+
+    return () => { activeAssignmentRequest.current += 1; };
+  }, [userRole, realClient?.id, accountAccessStatus]);
 
   const loadProfileRole = async (userId: string) => {
     const request = ++profileRoleRequest.current;
@@ -720,6 +748,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProfileRoleStatus('idle');
     setProfileRoleError(null);
     setRealClient(null);
+    setActiveProgramAssignment(null);
+    setActiveProgramAssignmentStatus('idle');
     setTrainer(INITIAL_TRAINER);
     localStorage.removeItem('strainer_user_role');
     localStorage.removeItem('strainer_trainer');
@@ -857,16 +887,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : [program, ...prev]);
   };
 
-  const applyProgramVersion = async (programId: string) => {
+  const applyProgramToClient = async (clientId: string, programId: string | null) => {
     if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
       throw new Error('Solo un Trainer con acceso habilitado puede aplicar una prescripción.');
     }
-    const { data, error } = await supabaseDb.applyProgramVersion(programId);
+    const { data, error } = await supabaseDb.applyProgramToClient(clientId, programId);
     if (error) throw error;
-    if (!data?.id || !Number.isInteger(data.version_number)) {
-      throw new Error('Supabase no confirmó la versión aplicada.');
+    if (!data || (programId && (!data.assignment?.id || !data.program_version?.id))) {
+      throw new Error('Supabase no confirmó la prescripción del cliente.');
     }
-    return { id: data.id as string, version_number: data.version_number as number };
+    return data;
   };
 
   const updateNutritionPlan = async (clientId: string, plan: NutritionPlan) => {
@@ -952,6 +982,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveClientId,
         loadRealClientForUser,
         programs,
+        activeProgramAssignment,
+        activeProgramAssignmentStatus,
+        activeProgramAssignmentError,
         nutritionPlans,
         accentColor,
         setAccentColor,
@@ -960,7 +993,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addClient,
         addTrainerNote,
         saveProgram,
-        applyProgramVersion,
+        applyProgramToClient,
         updateNutritionPlan,
         toggleMealCompleted,
         toggleShoppingItem,

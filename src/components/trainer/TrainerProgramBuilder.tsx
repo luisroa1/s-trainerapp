@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Edit2, Plus, Trash2, GripVertical, Check } from 'lucide-react';
 import { Program, ProgramDay, ExerciseItem } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { normalizeProgramIds, saveThenApply } from '../../lib/programVersion.mjs';
+import { normalizeProgramIds } from '../../lib/programVersion.mjs';
 
 interface TrainerProgramBuilderProps {
   program: Program;
@@ -15,7 +15,7 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
   onBack,
   onSave
 }) => {
-  const { saveProgram, applyProgramVersion } = useApp();
+  const { saveProgram } = useApp();
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [programName, setProgramName] = useState(program.name);
   const [days, setDays] = useState<ProgramDay[]>(() => normalizeProgramIds(program).days as ProgramDay[]);
@@ -34,37 +34,22 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
 
   const activeDay = days[activeDayIndex] || days[0];
 
-  const handleSaveProgram = async (apply = false) => {
+  const handleSaveProgram = async () => {
     if (isSaving) return;
     setIsSaving(true);
     setErrorMessage(null);
     setToast(null);
     const normalized = normalizeProgramIds({ ...program, name: programName, days });
-    let editableWorkSaved = false;
     try {
-      if (apply) {
-        await saveThenApply(
-          normalized,
-          async (savedProgram: Program) => {
-            await saveProgram(savedProgram);
-            editableWorkSaved = true;
-          },
-          applyProgramVersion,
-        );
-        setToast('Prescripción aplicada y guardada como versión.');
-      } else {
-        await saveProgram(normalized);
-        setToast('Cambios guardados.');
-      }
+      await saveProgram(normalized);
+      setToast('Cambios guardados.');
       window.setTimeout(() => {
         setToast(null);
         onSave();
       }, 900);
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Error desconocido.';
-      setErrorMessage(apply && editableWorkSaved
-        ? `El trabajo editable se guardó, pero no se pudo aplicar la prescripción. ${detail}`
-        : `No se pudo guardar el programa. ${detail}`);
+      setErrorMessage(`No se pudo guardar el programa. ${detail}`);
     } finally {
       setIsSaving(false);
     }
@@ -181,19 +166,11 @@ export const TrainerProgramBuilder: React.FC<TrainerProgramBuilderProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => void handleSaveProgram(false)}
+            onClick={() => void handleSaveProgram()}
             disabled={isSaving}
             className="px-5 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
           >
             Guardar
-          </button>
-          <button
-            onClick={() => void handleSaveProgram(true)}
-            disabled={isSaving}
-            style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-            className="px-6 py-2.5 rounded-full font-bold text-xs shadow-md transition-all active:scale-95"
-          >
-            Aplicar prescripción
           </button>
         </div>
       </div>

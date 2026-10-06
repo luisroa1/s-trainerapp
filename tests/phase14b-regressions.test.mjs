@@ -105,7 +105,7 @@ test('invite-client validates redirect before sending the invitation', () => {
   assert.match(source, /La URL de redirección no está autorizada\./);
 });
 
-test('trainer invitation only selects owned programs and fails closed without one', () => {
+test('trainer invitation may omit a program but never chooses one outside the Trainer ownership', () => {
   const invite = readFileSync(new URL('../src/components/trainer/TrainerInvite.tsx', import.meta.url), 'utf8');
   const db = readFileSync(new URL('../src/lib/supabase.ts', import.meta.url), 'utf8');
   const context = readFileSync(new URL('../src/context/AppContext.tsx', import.meta.url), 'utf8');
@@ -114,10 +114,13 @@ test('trainer invitation only selects owned programs and fails closed without on
   assert.match(db, /getPrograms\(trainerId: string\)[\s\S]*?\.eq\('trainer_id', trainerId\)/);
   assert.match(context, /supabaseDb\.getPrograms\(programOwnerId\)/);
   assert.match(invite, /programs\.filter\(program => program\.trainerId === supabaseUser\?\.id\)/);
-  assert.match(invite, /No tienes programas propios disponibles/);
-  assert.match(invite, /!trainerPrograms\.some\(program => program\.id === assignedProgram\)/);
+  assert.match(invite, /if \(assignedProgram && !trainerPrograms\.some\(program => program\.id === assignedProgram\)\)/);
+  assert.match(invite, /assignedProgramId: assignedProgram \|\| null/);
+  assert.match(invite, /Puedes invitar al cliente sin asignarle un programa todavía/);
   assert.doesNotMatch(edgeFunction, /rawAssignedProgramId \|\| 'prog-1'/);
-  assert.match(edgeFunction, /if \(!assignedProgramId\)/);
+  assert.match(edgeFunction, /p_program_id: assignedProgramId/);
+  assert.match(edgeFunction, /p_assignment_id: assignedProgramId \? crypto\.randomUUID\(\) : null/);
+  assert.match(edgeFunction, /complete_invited_client/);
   assert.match(edgeFunction, /\.eq\('trainer_id', user\.id\)/);
   assert.ok(edgeFunction.indexOf(".eq('trainer_id', user.id)") < edgeFunction.indexOf('adminClient.auth.admin.inviteUserByEmail('));
 });

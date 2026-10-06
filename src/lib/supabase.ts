@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
+import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
@@ -157,15 +157,41 @@ export const supabaseDb = {
     }
   },
 
-  async applyProgramVersion(programId: string): Promise<{ data: any | null; error: any }> {
+  async getActiveProgramAssignment(clientId: string): Promise<{ data: ActiveProgramAssignment | null; error: any }> {
     try {
-      const { data, error } = await supabase.rpc('apply_program_version', {
+      const { data, error } = await supabase
+        .from('client_program_assignments')
+        .select('id,client_id,program_version_id,assigned_by,assigned_at,ended_at,program_version:program_versions(id,program_id,version_number,snapshot,created_at)')
+        .eq('client_id', clientId)
+        .is('ended_at', null)
+        .maybeSingle();
+      if (error) return { data: null, error };
+      if (!data) return { data: null, error: null };
+
+      const version = Array.isArray(data.program_version) ? data.program_version[0] : data.program_version;
+      if (!version?.id || !version.snapshot || !Array.isArray(version.snapshot.days)) {
+        return { data: null, error: new Error('La prescripción asignada no tiene un snapshot válido.') };
+      }
+      return { data: { ...data, program_version: version } as ActiveProgramAssignment, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async applyProgramToClient(clientId: string, programId: string | null): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('apply_program_to_client', {
+        p_assignment_id: globalThis.crypto.randomUUID(),
+        p_client_id: clientId,
         p_program_id: programId,
       });
-      const version = Array.isArray(data) ? data[0] || null : data;
-      return { data: version, error };
-    } catch (err) {
-      return { data: null, error: err };
+      if (error) return { data: null, error };
+      if (!data || typeof data !== 'object' || !Object.hasOwn(data, 'assignment')) {
+        return { data: null, error: new Error('Supabase no confirmó la asignación.') };
+      }
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
     }
   },
 

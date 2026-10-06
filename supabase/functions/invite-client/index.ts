@@ -61,24 +61,23 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const email = normalizeEmail(body.email);
-    const objective = typeof body.objective === 'string' && body.objective.trim()
-      ? body.objective.trim()
-      : 'Pérdida de grasa';
-    const startDate = typeof body.startDate === 'string' ? body.startDate : new Date().toISOString().slice(0, 10);
-    const assignedProgramId = typeof body.assignedProgramId === 'string' ? body.assignedProgramId.trim() : '';
+    const objective = typeof body.objective === 'string' && body.objective.trim() ? body.objective.trim() : null;
+    const assignedProgramId = typeof body.assignedProgramId === 'string' && body.assignedProgramId.trim()
+      ? body.assignedProgramId.trim()
+      : null;
     if (!name) return json({ error: 'El nombre del cliente es obligatorio.' }, 400);
     if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return json({ error: 'Introduce un correo electrónico válido.' }, 400);
     }
-    if (!assignedProgramId) return json({ error: 'Selecciona un programa válido.' }, 400);
-
-    const { data: program, error: programError } = await adminClient
-      .from('programs').select('id').eq('id', assignedProgramId).eq('trainer_id', user.id).maybeSingle();
-    if (programError) {
-      console.error('invite-client program ownership lookup failed');
-      return json({ error: 'No se pudo verificar el programa seleccionado.' }, 500);
+    if (assignedProgramId) {
+      const { data: program, error: programError } = await adminClient
+        .from('programs').select('id').eq('id', assignedProgramId).eq('trainer_id', user.id).maybeSingle();
+      if (programError) {
+        console.error('invite-client program ownership lookup failed');
+        return json({ error: 'No se pudo verificar el programa seleccionado.' }, 500);
+      }
+      if (!program) return json({ error: 'El programa seleccionado no está disponible para esta cuenta.' }, 403);
     }
-    if (!program) return json({ error: 'El programa seleccionado no está disponible para esta cuenta.' }, 403);
 
     const [{ data: existingClient, error: existingClientError }, { data: existingProfile, error: existingProfileError }] = await Promise.all([
       adminClient.from('clients').select('id').eq('email', email).limit(2),
@@ -105,7 +104,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const correlationId = crypto.randomUUID();
-    const idempotencyKey = await sha256(JSON.stringify({ actor: user.id, email, name, objective, startDate, assignedProgramId }));
+    const idempotencyKey = await sha256(JSON.stringify({ actor: user.id, email, name, objective, assignedProgramId }));
     const { data: operation, error: operationError } = await adminClient.rpc('begin_client_invitation', {
       p_actor_user_id: user.id,
       p_target_email: email,
@@ -173,36 +172,22 @@ Deno.serve(async (req: Request) => {
           || latestActorAccess?.state !== 'enabled'
           || latestActorProfile?.role !== 'trainer') return { error: true };
 
-        const clientId = `cli-${crypto.randomUUID()}`;
-        const clientData = {
-          id: clientId,
-          user_id: invitedUser.id,
-          trainer_id: user.id,
-          name,
-          email,
-          objective,
-          status: 'Pendiente',
-          startDate,
-          assignedProgramId,
-          adherencePercentage: 100,
-          completedWorkoutsCount: 0,
-          totalScheduledWorkoutsCount: 0,
-          metrics: {},
-          weeklySchedule: [],
-          trainerNotes: [],
-        };
-        const { data, error } = await adminClient.from('clients').insert({
-          id: clientId,
-          user_id: invitedUser.id,
-          trainer_id: user.id,
-          name,
-          email,
-          objective,
-          status: 'Pendiente',
-          assigned_program_id: assignedProgramId,
-          data: clientData,
-        }).select('id,name,email,status,assigned_program_id,data').single();
-        return { data: data?.data || data, error };
+        const { data, error } = await userClient.rpc('complete_invited_client', {
+          p_operation_id: operation.operation_id,
+          p_target_user_id: invitedUser.id,
+          p_client_id: `cli-${crypto.randomUUID()}`,
+          p_name: name,
+          p_email: email,
+          p_objective: objective,
+          p_program_id: assignedProgramId,
+          p_assignment_id: assignedProgramId ? crypto.randomUUID() : null,
+        });
+        if (error) return { error };
+        const relation = data?.client;
+        if (!relation?.id || (assignedProgramId && (!data?.assignment?.id || !data?.program_version?.id))) {
+          return { error: new Error('La relación o asignación no quedó confirmada.') };
+        }
+        return { data: relation, error: null };
       },
       finishOperation,
     });

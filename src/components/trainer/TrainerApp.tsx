@@ -42,6 +42,7 @@ export const TrainerApp: React.FC = () => {
   const { 
     clients, 
     programs, 
+    setActiveClientId,
     appName, 
     trainer, 
     updateTrainer, 
@@ -104,6 +105,7 @@ export const TrainerApp: React.FC = () => {
 
   const handleSelectClient = (client: ClientData) => {
     setSelectedClient(client);
+    setActiveClientId(client.id);
     setActiveSection('client_detail');
   };
 

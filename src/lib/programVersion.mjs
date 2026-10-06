@@ -54,9 +54,3 @@ export function buildProgramPrescriptionSnapshot(program) {
     })),
   };
 }
-
-export async function saveThenApply(program, saveProgram, applyProgramVersion) {
-  const normalized = normalizeProgramIds(program);
-  await saveProgram(normalized);
-  return applyProgramVersion(normalized.id);
-}

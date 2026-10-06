@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildProgramPrescriptionSnapshot,
   normalizeProgramIds,
-  saveThenApply,
 } from '../src/lib/programVersion.mjs';
+import { readFileSync } from 'node:fs';
 
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
@@ -99,24 +99,11 @@ test('empty program stays empty and does not invent a day or exercise', () => {
   assert.deepEqual(buildProgramPrescriptionSnapshot({ days: [] }), { schema_version: 1, days: [] });
 });
 
-test('apply waits for confirmed save and propagates save/apply failures', async () => {
-  const program = normalizeProgramIds(sampleProgram(), (() => {
-    let n = 0;
-    return () => uuid(++n);
-  })());
-  const events = [];
-  const result = await saveThenApply(
-    program,
-    async () => { events.push('save-confirmed'); },
-    async id => { events.push(`apply:${id}`); return 'version'; },
-  );
-  assert.equal(result, 'version');
-  assert.deepEqual(events.slice(-2), ['save-confirmed', 'apply:program-a']);
-
-  let applied = false;
-  await assert.rejects(saveThenApply(program, async () => { throw new Error('save failed'); }, async () => { applied = true; }));
-  assert.equal(applied, false);
-  await assert.rejects(saveThenApply(program, async () => {}, async () => { throw new Error('apply failed'); }), /apply failed/);
+test('saving a program waits for persistence and does not create or assign a version', () => {
+  const builder = readFileSync(new URL('../src/components/trainer/TrainerProgramBuilder.tsx', import.meta.url), 'utf8');
+  assert.match(builder, /await saveProgram\(normalized\)/);
+  assert.match(builder, /setToast\('Cambios guardados\.'\)/);
+  assert.doesNotMatch(builder, /apply_program_version|applyProgramVersion|applyProgramToClient|Guardar y asignar/);
 });
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

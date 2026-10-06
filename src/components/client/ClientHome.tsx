@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { programFromActiveAssignment } from '../../lib/clientProgramAssignment.mjs';
+import { ProgramDay } from '../../types';
 import { Check, User, Bell, MessageSquare, Moon, MoonStar, Dumbbell, Salad, Flame, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { ClientMotivationalModal, MotivationType } from './ClientMotivationalModal';
 import heroTrainingPhoto from '../../assets/hero-training.jpg';
@@ -20,7 +22,7 @@ interface ClientHomeProps {
 }
 
 export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNavigateTab, hasActiveSession = false }) => {
-  const { activeClient, appName, programs } = useApp();
+  const { activeClient, appName, activeProgramAssignment, activeProgramAssignmentStatus, activeProgramAssignmentError } = useApp();
   const [activeModal, setActiveModal] = useState<MotivationType | null>(null);
 
   const firstName = activeClient?.name ? (activeClient.name.split(' ')[0] || 'Jesús') : 'Jesús';
@@ -29,10 +31,10 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
   const completedCount = weeklySchedule.filter(s => s.status === 'completed').length;
   const targetCount = weeklySchedule.filter(s => s.status !== 'rest').length;
 
-  // Localizar el programa asignado al cliente
-  const assignedProgram = programs.find(
-    p => p.id === activeClient?.assignedProgramId
-  );
+  // The active immutable snapshot is the sole Client prescription source.
+  const assignedProgram = programFromActiveAssignment(activeProgramAssignment) as {
+    id: string; versionId: string; versionNumber: number; days: ProgramDay[];
+  } | null;
 
   // Determinar día de la semana actual (D, L, M, X, J, V, S)
   const DAY_CODES: Array<'D' | 'L' | 'M' | 'X' | 'J' | 'V' | 'S'> = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
@@ -279,7 +281,11 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
           ENTRENAMIENTO DE HOY
         </span>
 
-        {!activeClient?.assignedProgramId ? (
+        {activeProgramAssignmentStatus === 'loading' ? (
+          <p role="status" className="text-sm text-[#8E8E94]">Cargando tu prescripción…</p>
+        ) : activeProgramAssignmentStatus === 'error' ? (
+          <p role="alert" className="text-sm text-red-300">{activeProgramAssignmentError || 'No se pudo cargar tu prescripción.'}</p>
+        ) : !activeProgramAssignment ? (
           <div>
             <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
               Sin programa asignado
@@ -294,20 +300,10 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onNaviga
               </p>
             </div>
           </div>
-        ) : !assignedProgram ? (
+        ) : !assignedProgram || assignedProgram.days.length === 0 ? (
           <div>
-            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">
-              Programa no disponible
-            </h3>
-            <p className="text-xs text-[#8E8E94] font-medium mt-0.5 mb-2.5">
-              Programa asignado: {activeClient.assignedProgramId}
-            </p>
-            <div className="p-3 rounded-[12px] bg-[#16161A] border border-[#2A2A2F] flex items-start gap-2.5">
-              <MessageSquare className="w-4 h-4 text-[#8E8E94] shrink-0 mt-0.5" />
-              <p className="text-xs text-[#8E8E94] leading-relaxed">
-                <span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> estamos preparando tu programa para que puedas comenzar.
-              </p>
-            </div>
+            <h3 className="text-[28px] font-extrabold font-display text-[#F5F4F0] leading-tight">Tu prescripción aún no contiene sesiones</h3>
+            <p className="text-xs text-[#8E8E94] mt-1">Tu entrenador podrá completar el programa cuando esté listo.</p>
           </div>
         ) : isRestDay ? (
           <div>

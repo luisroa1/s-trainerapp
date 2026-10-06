@@ -8,12 +8,13 @@ import {
   CheckCircle2, 
   Moon, 
   Plus, 
-  Check, 
   Send 
 } from 'lucide-react';
 import { ClientData } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { supabaseDb } from '../../lib/supabase';
+import type { TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
+import { formatPerformedLoad, formatPerformedMeasure, plannedPerformedRows } from '../../lib/trainerWorkoutHistory.mjs';
 
 interface TrainerClientDetailProps {
   client: ClientData;
@@ -33,6 +34,9 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
   const [assignmentStatus, setAssignmentStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
+  const [workoutHistory, setWorkoutHistory] = useState<TrainerWorkoutHistoryEntry[]>([]);
+  const [workoutHistoryStatus, setWorkoutHistoryStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [workoutHistoryError, setWorkoutHistoryError] = useState<string | null>(null);
   const [selectedProgramId, setSelectedProgramId] = useState('');
   const [isApplying, setIsApplying] = useState(false);
   const [activeTab, setActiveTab] = useState<'Entrenamientos' | 'Peso' | 'Medidas' | 'Fuerza' | 'Nutrición' | 'Actividad' | 'Fotos' | 'Notas'>('Entrenamientos');
@@ -61,6 +65,24 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
 
   useEffect(() => {
     void refreshAssignment();
+  }, [client.id]);
+
+  useEffect(() => {
+    let current = true;
+    setWorkoutHistoryStatus('loading');
+    setWorkoutHistoryError(null);
+    supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
+      if (!current) return;
+      if (error || !data) {
+        setWorkoutHistory([]);
+        setWorkoutHistoryStatus('error');
+        setWorkoutHistoryError('No se pudo consultar el historial de entrenamientos.');
+        return;
+      }
+      setWorkoutHistory(data);
+      setWorkoutHistoryStatus('loaded');
+    });
+    return () => { current = false; };
   }, [client.id]);
 
   const activeProgramId = activeAssignment?.program_version?.program_id || '';
@@ -332,78 +354,90 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
       {/* Content depending on tab */}
       {activeTab === 'Entrenamientos' && (
         <div className="grid grid-cols-3 gap-6">
-          {/* Column 1 & 2: ÚLTIMA SESIÓN — PROGRAMADO VS REALIZADO & ESTA SEMANA */}
+          {/* Real persisted execution history; legacy weeklySchedule is not execution evidence. */}
           <div className="col-span-2 space-y-6">
             <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F]">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">
-                  ÚLTIMA SESIÓN — PROGRAMADO VS REALIZADO
-                </span>
-                <span className="text-xs text-[#8E8E94]">Jueves · Empuje</span>
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">Sesiones registradas</span>
+                {workoutHistoryStatus === 'loaded' && <span className="text-xs text-[#8E8E94]">{workoutHistory.length}</span>}
               </div>
-
-              <h3 className="text-base font-bold text-[#F5F4F0] mb-4">
-                Press banca
-              </h3>
-
-              <div className="grid grid-cols-2 gap-6 p-4 rounded-[12px] bg-[#1B1B1F] border border-[#2A2A2F]">
-                {/* Programado */}
-                <div>
-                  <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-2">
-                    PROGRAMADO
-                  </span>
-                  <span className="text-base font-extrabold font-display text-[#F5F4F0]">
-                    80 kg × 10 × 4
-                  </span>
+              {workoutHistoryStatus === 'loading' && <p role="status" className="text-sm text-[#8E8E94]">Consultando ejecuciones registradas…</p>}
+              {workoutHistoryStatus === 'error' && (
+                <div role="alert" className="text-sm text-red-300">
+                  <p>{workoutHistoryError}</p>
+                  <button type="button" onClick={() => {
+                    setWorkoutHistoryStatus('loading');
+                    void supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
+                      if (error || !data) {
+                        setWorkoutHistoryStatus('error');
+                        setWorkoutHistoryError('No se pudo consultar el historial de entrenamientos.');
+                        return;
+                      }
+                      setWorkoutHistory(data);
+                      setWorkoutHistoryStatus('loaded');
+                      setWorkoutHistoryError(null);
+                    });
+                  }} className="mt-2 underline">Reintentar</button>
                 </div>
-
-                {/* Realizado */}
-                <div>
-                  <span className="text-[10px] font-bold tracking-widest text-[var(--accent-color,#CFFF5C)] uppercase block mb-2">
-                    REALIZADO
-                  </span>
-                  <div className="space-y-1 text-xs font-semibold text-[#F5F4F0]">
-                    <div>80 kg × 10</div>
-                    <div>80 kg × 10</div>
-                    <div>80 kg × 9</div>
-                    <div>80 kg × 8</div>
+              )}
+              {workoutHistoryStatus === 'loaded' && workoutHistory.length === 0 && (
+                <p className="text-sm text-[#8E8E94]">Todavía no hay entrenamientos registrados.</p>
+              )}
+              {workoutHistoryStatus === 'loaded' && workoutHistory.map((entry, sessionIndex) => (
+                <details key={entry.session.id} open={sessionIndex === 0} className="border-t border-[#2A2A2F] py-3 first:border-0 first:pt-0">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-[#F5F4F0]">{entry.day.title}</h3>
+                        <p className="mt-1 text-[11px] text-[#8E8E94]">
+                          {new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.session.started_at))}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.session.completed_at ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-300'}`}>
+                        {entry.session.completed_at ? 'Finalizada' : 'En curso'}
+                      </span>
+                    </div>
+                  </summary>
+                  <div className="mt-4 space-y-4">
+                    {entry.day.exercises.map((exercise: TrainerWorkoutSnapshotExercise) => (
+                      <div key={exercise.id} className="rounded-xl border border-[#2A2A2F] bg-[#1B1B1F] p-3.5">
+                        <div className="mb-3">
+                          <h4 className="text-sm font-bold text-[#F5F4F0]">{exercise.order}. {exercise.name}</h4>
+                          {exercise.instructions && <p className="mt-1 text-xs leading-relaxed text-[#A0A0A8]">{exercise.instructions}</p>}
+                        </div>
+                        <div className="grid grid-cols-[minmax(64px,0.55fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#77777F]">Serie</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#A0A0A8]">Pautado</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#CFFF5C]">Realizado</span>
+                          {plannedPerformedRows(entry, exercise.id).map(row => {
+                            const plannedParts = row.planned ? [
+                              row.planned.reps === null ? 'Reps sin pauta' : `${row.planned.reps} reps`,
+                              row.planned.load === null ? 'Carga sin pauta' : row.planned.load,
+                              row.planned.rir === null ? 'RIR sin pauta' : `RIR ${row.planned.rir}`,
+                            ].filter(Boolean) : [];
+                            const performed = row.performed;
+                            const performedParts = performed ? [
+                              formatPerformedMeasure(performed),
+                              formatPerformedLoad(performed),
+                              performed.rir_performed === null ? 'RIR Sin dato' : `RIR ${performed.rir_performed}`,
+                            ] : [];
+                            return (
+                              <React.Fragment key={row.set_number}>
+                                <span className="text-[#A0A0A8]">Serie {row.set_number}</span>
+                                <span className="text-[#F5F4F0]">{row.planned ? (plannedParts.join(' · ') || 'Sin objetivo estructurado') : 'Sin serie pautada'}</span>
+                                <span className="text-[#F5F4F0]">
+                                  {performed ? performedParts.join(' · ') : 'Sin registro'}
+                                  {performed?.note && <span className="mt-1 block text-[#A0A0A8]">{performed.note}</span>}
+                                </span>
+                              </React.Fragment>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ESTA SEMANA calendar */}
-            <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F]">
-              <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-3">
-                ESTA SEMANA
-              </span>
-              <div className="flex items-center justify-between max-w-sm">
-                {client.weeklySchedule.map((dayItem, index) => (
-                  <div key={index} className="flex flex-col items-center gap-1.5">
-                    <span className="text-[11px] font-medium text-[#8E8E94]">{dayItem.day}</span>
-                    {dayItem.status === 'completed' && (
-                      <div className="w-8 h-8 rounded-full bg-[var(--accent-color,#CFFF5C)] text-[#101012] flex items-center justify-center">
-                        <Check className="w-4 h-4 stroke-[3]" />
-                      </div>
-                    )}
-                    {dayItem.status === 'pending' && (
-                      <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border-2 border-[#FF6B4A] flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-[#FF6B4A]" />
-                      </div>
-                    )}
-                    {dayItem.status === 'rest' && (
-                      <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#3A3A40] font-bold text-xs">
-                        —
-                      </div>
-                    )}
-                    {dayItem.status === 'protected_streak' && (
-                      <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border-2 border-amber-400 flex items-center justify-center text-amber-400">
-                        <div className="w-2 h-2 rounded-full bg-amber-400" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                </details>
+              ))}
             </div>
           </div>
 

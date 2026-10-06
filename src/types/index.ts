@@ -222,3 +222,43 @@ export interface WorkoutSessionView {
   results: WorkoutSetResult[];
   recovered: boolean;
 }
+
+export interface TrainerWorkoutSnapshotExercise {
+  id: string;
+  order: number;
+  name: string;
+  muscle_group?: string | null;
+  target_sets: number;
+  target_reps?: number | null;
+  target_load?: string | null;
+  target_rir?: number | null;
+  rest_seconds?: number | null;
+  instructions?: string | null;
+  video_url?: string | null;
+}
+
+export interface TrainerWorkoutSetResult extends WorkoutSetResult {}
+
+export interface TrainerWorkoutHistoryEntry {
+  session: WorkoutSessionView['session'];
+  assignment: {
+    id: string;
+    client_id: string;
+    program_version_id: string;
+    assigned_at: string;
+    ended_at: string | null;
+  };
+  programVersion: {
+    id: string;
+    program_id: string;
+    version_number: number;
+  };
+  day: {
+    id: string;
+    order: number;
+    title: string;
+    focus_area?: string | null;
+    exercises: TrainerWorkoutSnapshotExercise[];
+  };
+  results: TrainerWorkoutSetResult[];
+}

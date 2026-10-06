@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult } from '../types';
+import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
 import { workoutSessionFromRpc } from './workoutExecution.mjs';
+import { buildTrainerWorkoutHistory } from './trainerWorkoutHistory.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
@@ -174,6 +175,51 @@ export const supabaseDb = {
         return { data: null, error: new Error('La prescripción asignada no tiene un snapshot válido.') };
       }
       return { data: { ...data, program_version: version } as ActiveProgramAssignment, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async getTrainerWorkoutHistory(clientId: string): Promise<{ data: TrainerWorkoutHistoryEntry[] | null; error: any }> {
+    try {
+      const sessionRows: any[] = [];
+      const pageSize = 100;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+          .from('workout_sessions')
+          .select('id,client_program_assignment_id,program_day_id,started_at,completed_at,assignment:client_program_assignments!inner(id,client_id,program_version_id,assigned_at,ended_at,program_version:program_versions!inner(id,program_id,version_number,snapshot))')
+          .eq('assignment.client_id', clientId)
+          .order('started_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) return { data: null, error };
+        sessionRows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+      }
+
+      if (sessionRows.length === 0) return { data: [], error: null };
+
+      const sessionIds = sessionRows.map(row => row.id);
+      const resultRows: WorkoutSetResult[] = [];
+      for (let offset = 0; offset < sessionIds.length; offset += pageSize) {
+        const ids = sessionIds.slice(offset, offset + pageSize);
+        const resultPageSize = 1000;
+        for (let resultOffset = 0; ; resultOffset += resultPageSize) {
+          const { data, error } = await supabase
+            .from('workout_set_results')
+            .select('id,workout_session_id,exercise_id,set_number,reps_performed,duration_seconds,load_kind,load_kg,rir_performed,note,created_at,updated_at')
+            .in('workout_session_id', ids)
+            .order('exercise_id', { ascending: true })
+            .order('set_number', { ascending: true })
+            .range(resultOffset, resultOffset + resultPageSize - 1);
+          if (error) return { data: null, error };
+          resultRows.push(...((data || []) as WorkoutSetResult[]));
+          if (!data || data.length < resultPageSize) break;
+        }
+      }
+
+      const model = buildTrainerWorkoutHistory(sessionRows, resultRows, clientId);
+      return { data: model as TrainerWorkoutHistoryEntry[], error: null };
     } catch (error) {
       return { data: null, error };
     }

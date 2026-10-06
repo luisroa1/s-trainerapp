@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
-import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerProfile, UserRole } from '../types';
+import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
+import { workoutSessionFromRpc } from './workoutExecution.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
@@ -190,6 +191,68 @@ export const supabaseDb = {
         return { data: null, error: new Error('Supabase no confirmó la asignación.') };
       }
       return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async getOpenWorkoutSession(): Promise<{ data: WorkoutSessionView | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('get_open_workout_session');
+      if (error) return { data: null, error };
+      if (data === null) return { data: null, error: null };
+      const session = workoutSessionFromRpc(data) as WorkoutSessionView | null;
+      if (!session) return { data: null, error: new Error('Supabase devolvió una sesión incompleta.') };
+      return { data: session, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async startWorkoutSession(programDayId: string): Promise<{ data: WorkoutSessionView | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('start_workout_session', { p_program_day_id: programDayId });
+      if (error) return { data: null, error };
+      const session = workoutSessionFromRpc(data) as WorkoutSessionView | null;
+      if (!session) return { data: null, error: new Error('Supabase no confirmó el inicio de la sesión.') };
+      return { data: session, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async saveWorkoutSetResult(input: Omit<WorkoutSetResult, 'id' | 'workout_session_id' | 'created_at' | 'updated_at'> & { workout_session_id: string }): Promise<{ data: WorkoutSetResult | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('save_workout_set_result', {
+        p_workout_session_id: input.workout_session_id,
+        p_exercise_id: input.exercise_id,
+        p_set_number: input.set_number,
+        p_reps_performed: input.reps_performed,
+        p_duration_seconds: input.duration_seconds,
+        p_load_kind: input.load_kind,
+        p_load_kg: input.load_kg,
+        p_rir_performed: input.rir_performed,
+        p_note: input.note,
+      });
+      if (error) return { data: null, error };
+      if (!data?.id || data.workout_session_id !== input.workout_session_id) {
+        return { data: null, error: new Error('Supabase no confirmó la serie guardada.') };
+      }
+      return { data: data as WorkoutSetResult, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async finishWorkoutSession(sessionId: string): Promise<{ data: WorkoutSessionView | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('finish_workout_session', { p_workout_session_id: sessionId });
+      if (error) return { data: null, error };
+      const session = workoutSessionFromRpc(data) as WorkoutSessionView | null;
+      if (!session?.session.completed_at) {
+        return { data: null, error: new Error('Supabase no confirmó la finalización de la sesión.') };
+      }
+      return { data: session, error: null };
     } catch (error) {
       return { data: null, error };
     }

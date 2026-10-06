@@ -193,3 +193,32 @@ export interface WorkoutSetRecord {
   completed: boolean;
   rir?: number;
 }
+
+export interface WorkoutSetResult {
+  id: string;
+  workout_session_id: string;
+  exercise_id: string;
+  set_number: number;
+  reps_performed: number | null;
+  duration_seconds: number | null;
+  load_kind: 'external_kg' | 'external_kg_per_dumbbell' | 'bodyweight' | 'none' | null;
+  load_kg: number | null;
+  rir_performed: number | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkoutSessionView {
+  session: {
+    id: string;
+    client_program_assignment_id: string;
+    program_day_id: string;
+    started_at: string;
+    completed_at: string | null;
+  };
+  program_version_id: string;
+  day: ProgramDay;
+  results: WorkoutSetResult[];
+  recovered: boolean;
+}

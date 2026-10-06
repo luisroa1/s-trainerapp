@@ -3,8 +3,6 @@ import { Home, Dumbbell, TrendingUp, Apple, User } from 'lucide-react';
 import { ClientOnboarding } from './ClientOnboarding';
 import { ClientHome } from './ClientHome';
 import { WorkoutExercise } from './WorkoutExercise';
-import type { WorkoutProgress, RecordedSetInfo } from './WorkoutExercise';
-import { WorkoutRest } from './WorkoutRest';
 import { ClientProgress } from './ClientProgress';
 import { ClientMeasurements } from './ClientMeasurements';
 import { ClientNutrition } from './ClientNutrition';
@@ -18,6 +16,8 @@ import { ClientReminders } from './ClientReminders';
 import { ClientHelp } from './ClientHelp';
 import { ClientActivate } from './ClientActivate';
 import { useApp } from '../../context/AppContext';
+import { supabaseDb } from '../../lib/supabase';
+import type { WorkoutSessionView } from '../../types';
 
 type Tab = 'hoy' | 'entreno' | 'progreso' | 'nutricion' | 'perfil';
 type Screen =
@@ -25,7 +25,6 @@ type Screen =
   | 'activate'
   | Tab
   | 'workout_exercise'
-  | 'workout_rest'
   | 'medidas'
   | 'fotos'
   | 'calculadora'
@@ -38,6 +37,9 @@ type Screen =
 
 export const ClientApp: React.FC = () => {
   const { activeClient, signOut, supabaseUser, loadRealClientForUser } = useApp();
+  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionView | null>(null);
+  const [workoutSessionStatus, setWorkoutSessionStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [workoutSessionError, setWorkoutSessionError] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash || '';
@@ -56,29 +58,62 @@ export const ClientApp: React.FC = () => {
   });
   const [activeTab, setActiveTab] = useState<Tab>('hoy');
 
-  // Fuente de verdad del progreso del entrenamiento en curso. Vive aquí (en
-  // ClientApp, que nunca se desmonta) precisamente para sobrevivir a la
-  // navegación WorkoutExercise -> WorkoutRest -> WorkoutExercise, sea cual
-  // sea el ejercicio, el número de series o el entrenamiento.
-  const [workoutProgress, setWorkoutProgress] = useState<WorkoutProgress>({
-    sessionActive: false,
-    currentExerciseIndex: 0,
-    activeSetIndex: 0,
-    completedSets: []
-  });
 
-  // Solo para mostrar en WorkoutRest qué serie se acaba de completar y cuál
-  // es el objetivo de la siguiente. NO es el estado fuente de verdad del
-  // entrenamiento (ese es workoutProgress, arriba).
-  const [lastRestInfo, setLastRestInfo] = useState<RecordedSetInfo>({
-    setNum: 0,
-    weight: 0,
-    reps: 0,
-    targetSets: 0,
-    targetWeight: 0,
-    targetReps: 0,
-    targetRir: 0
-  });
+  React.useEffect(() => {
+    if (!supabaseUser?.id || !activeClient?.id) {
+      setWorkoutSession(null);
+      setWorkoutSessionStatus('loaded');
+      return;
+    }
+    let current = true;
+    setWorkoutSessionStatus('loading');
+    setWorkoutSessionError(null);
+    supabaseDb.getOpenWorkoutSession().then(({ data, error }) => {
+      if (!current) return;
+      if (error) {
+        setWorkoutSessionStatus('error');
+        setWorkoutSessionError('No se pudo recuperar la sesión. Reintenta más tarde.');
+        return;
+      }
+      setWorkoutSession(data);
+      setWorkoutSessionStatus('loaded');
+    });
+    return () => { current = false; };
+  }, [supabaseUser?.id, activeClient?.id]);
+
+  const startWorkout = async (programDayId: string) => {
+    setWorkoutSessionStatus('loading');
+    setWorkoutSessionError(null);
+    const { data, error } = await supabaseDb.startWorkoutSession(programDayId);
+    if (error || !data) {
+      setWorkoutSessionStatus('error');
+      setWorkoutSessionError('No se pudo iniciar el entrenamiento. No se ha confirmado ningún cambio. Reintenta.');
+      return;
+    }
+    setWorkoutSession(data);
+    setWorkoutSessionStatus('loaded');
+    setActiveTab('entreno');
+    setCurrentScreen('workout_exercise');
+  };
+
+  const continueWorkout = () => {
+    if (!workoutSession || workoutSession.session.completed_at) return;
+    setActiveTab('entreno');
+    setCurrentScreen('workout_exercise');
+  };
+
+  const retryOpenWorkoutSession = async () => {
+    setWorkoutSessionStatus('loading');
+    setWorkoutSessionError(null);
+    const { data, error } = await supabaseDb.getOpenWorkoutSession();
+    if (error) {
+      setWorkoutSessionStatus('error');
+      setWorkoutSessionError('No se pudo recuperar la sesión. Reintenta más tarde.');
+      return;
+    }
+    setWorkoutSession(data);
+    setWorkoutSessionStatus('loaded');
+  };
 
   // Listen to hash changes if an invite link is clicked or updated
   React.useEffect(() => {
@@ -101,10 +136,17 @@ export const ClientApp: React.FC = () => {
   }, []);
 
   const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab);
     if (tab === 'entreno') {
-      setCurrentScreen('workout_exercise');
+      if (workoutSession && !workoutSession.session.completed_at) {
+        setActiveTab('entreno');
+        setCurrentScreen('workout_exercise');
+      } else {
+        // The workout picker lives on Hoy; never route to an empty execution screen.
+        setActiveTab('hoy');
+        setCurrentScreen('hoy');
+      }
     } else {
+      setActiveTab(tab);
       setCurrentScreen(tab);
     }
   };
@@ -161,48 +203,22 @@ export const ClientApp: React.FC = () => {
 
         {currentScreen === 'hoy' && (
           <ClientHome
-            hasActiveSession={workoutProgress.sessionActive}
-            onStartWorkout={() => {
-              // Si ya hay una sesión activa (p.ej. el usuario volvió con
-              // "←" desde WorkoutExercise), "Continuar entrenamiento" debe
-              // retomar exactamente donde se quedó: no se reinicia el
-              // progreso. Solo se reinicia cuando no hay sesión en curso
-              // (entrenamiento nuevo o el anterior ya se completó).
-              setWorkoutProgress(prev =>
-                prev.sessionActive
-                  ? prev
-                  : {
-                      sessionActive: true,
-                      currentExerciseIndex: 0,
-                      activeSetIndex: 0,
-                      completedSets: []
-                    }
-              );
-              setActiveTab('entreno');
-              setCurrentScreen('workout_exercise');
-            }}
+            openWorkoutSession={workoutSession?.session.completed_at ? null : workoutSession}
+            workoutSessionStatus={workoutSessionStatus}
+            workoutSessionError={workoutSessionError}
+            onStartWorkout={(programDayId) => void startWorkout(programDayId)}
+            onContinueWorkout={continueWorkout}
+            onRetryWorkoutSession={() => void retryOpenWorkoutSession()}
             onNavigateTab={handleTabChange}
           />
         )}
 
-        {currentScreen === 'workout_exercise' && (
+        {currentScreen === 'workout_exercise' && workoutSession && (
           <WorkoutExercise
             onBack={() => setCurrentScreen('hoy')}
             onClose={() => setCurrentScreen('hoy')}
-            progress={workoutProgress}
-            onProgressChange={setWorkoutProgress}
-            onGoToRest={(info) => {
-              setLastRestInfo(info);
-              setCurrentScreen('workout_rest');
-            }}
-          />
-        )}
-
-        {currentScreen === 'workout_rest' && (
-          <WorkoutRest
-            recordedInfo={lastRestInfo}
-            onBack={() => setCurrentScreen('workout_exercise')}
-            onFinishRest={() => setCurrentScreen('workout_exercise')}
+            session={workoutSession}
+            onSessionChange={setWorkoutSession}
           />
         )}
 

@@ -45,10 +45,10 @@ test('Client screens consume the active assignment snapshot and contain no mutab
   const workout = readFileSync(new URL('../src/components/client/WorkoutExercise.tsx', import.meta.url), 'utf8');
   const context = readFileSync(new URL('../src/context/AppContext.tsx', import.meta.url), 'utf8');
 
-  for (const source of [home, workout]) {
-    assert.match(source, /programFromActiveAssignment\(activeProgramAssignment\)/);
-    assert.doesNotMatch(source, /\.from\(['"]programs['"]\)|\.data\?\.days|assignedProgramId/);
-  }
+  assert.match(home, /programFromActiveAssignment\(activeProgramAssignment\)/);
+  assert.match(workout, /session\.day\.exercises/);
+  assert.doesNotMatch(home, /\.from\(['"]programs['"]\)|\.data\?\.days|assignedProgramId|weeklySchedule\./);
+  assert.doesNotMatch(workout, /\.from\(['"]programs['"]\)|\.data\?\.days|assignedProgramId|weeklySchedule\./);
   assert.match(context, /getActiveProgramAssignment\(realClient\.id\)/);
   assert.match(context, /authenticatedRole === 'trainer' \? authenticatedUserId/);
   assert.doesNotMatch(context, /if \(!client\.assignedProgramId[\s\S]{0,120}assignedProgramId/);

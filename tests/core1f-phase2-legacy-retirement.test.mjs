@@ -126,14 +126,14 @@ test('manual measurements remain optional and absent values do not become zero',
   assert.doesNotMatch(measurements, /setCintura\(Number\(e\.target\.value\)\)/);
 });
 
-test('missing or partial menstrual tracking is not replaced with a synthetic cycle', () => {
+test('missing or partial menstrual tracking is not synthesized or surfaced on Client Home', () => {
   const cycle = source('../src/components/client/ClientCycle.tsx');
   const home = source('../src/components/client/ClientHome.tsx');
   assert.match(cycle, /const tracking = activeClient\.menstrualTracking;/);
   assert.doesNotMatch(cycle, /activeClient\.menstrualTracking\s*\|\|\s*\{|day:\s*3|enabled:\s*true,\s*sharedWithTrainer/);
   assert.match(cycle, /tracking\?\.enabled === true/);
   assert.match(cycle, /Sin fase registrada/);
-  assert.match(home, /activeClient\.menstrualTracking\?\.enabled/);
+  assert.doesNotMatch(home, /activeClient\.menstrualTracking|menstrual_profile|cycle_pattern/i);
 });
 
 test('help text no longer promises unavailable adherence, alert, streak, or weekly-calendar features', () => {

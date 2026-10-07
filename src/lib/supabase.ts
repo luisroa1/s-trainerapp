@@ -6,6 +6,7 @@ import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clie
 import { clientFieldsFromPersistedData, readOptionalPersistedNumber } from './clientLegacyFields.mjs';
 import { workoutSessionFromRpc } from './workoutExecution.mjs';
 import { buildTrainerWorkoutHistory } from './trainerWorkoutHistory.mjs';
+import { CLIENT_ONBOARDING_FLOW_VERSION, getCurrentHealthDeclaration, sameHealthDeclaration } from './clientOnboarding.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
@@ -116,6 +117,130 @@ export const supabaseDb = {
     } catch (err) {
       return { error: err };
     }
+  },
+
+  // Canonical Client Onboarding 1A persistence. Reads and writes use only the
+  // dedicated 1A entities/RPCs; no clients.data or localStorage fallback.
+  async getClientOnboardingEntry(clientId: string): Promise<{ data: any | null; error: any }> {
+    try {
+      const [client, state, profile] = await Promise.all([
+        supabase.from('clients').select('id,created_at').eq('id', clientId).maybeSingle(),
+        supabase.from('client_onboarding_state').select('status,flow_version,resume_step,started_at,updated_at,completed_at').eq('client_id', clientId).maybeSingle(),
+        supabase.from('client_profile').select('preferred_name').eq('client_id', clientId).maybeSingle(),
+      ]);
+      const error = client.error || state.error || profile.error;
+      if (error) return { data: null, error };
+      if (!client.data?.created_at) return { data: null, error: new Error('No se pudo confirmar la antigüedad de la ficha del cliente.') };
+      return { data: { createdAt: client.data.created_at, state: state.data || null, preferredName: profile.data?.preferred_name || null }, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async getClientOnboardingSnapshot(clientId: string): Promise<{ data: any | null; error: any }> {
+    try {
+      const [profile, training, weights, goal, health, menstrual] = await Promise.all([
+        supabase.from('client_profile').select('preferred_name,date_of_birth,physiological_sex,height_cm').eq('client_id', clientId).maybeSingle(),
+        supabase.from('client_training_context').select('daily_activity_pattern,daily_steps_band,strength_training_status,experience_band,time_since_training_band,availability_days,training_location').eq('client_id', clientId).maybeSingle(),
+        supabase.from('client_weight_records').select('id,weight_kg,measured_on,recorded_at').eq('client_id', clientId).order('recorded_at', { ascending: false }).limit(20),
+        supabase.from('client_goal_history').select('id,primary_goal,primary_other_text,secondary_goals,secondary_other_text,started_at,ended_at').eq('client_id', clientId).is('ended_at', null).maybeSingle(),
+        supabase.from('client_health_declarations').select('id,client_id,has_relevant_information,categories,body_region,description,supersedes_id,recorded_at').eq('client_id', clientId).order('recorded_at', { ascending: true }),
+        supabase.from('client_menstrual_profile').select('tracking_choice,last_menstrual_start,usual_cycle_days,cycle_pattern').eq('client_id', clientId).maybeSingle(),
+      ]);
+      const error = profile.error || training.error || weights.error || goal.error || health.error || menstrual.error;
+      if (error) return { data: null, error };
+      const healthRows = health.data || [];
+      return {
+        data: {
+          profile: profile.data || null,
+          training: training.data || null,
+          latestWeight: weights.data?.[0] || null,
+          goal: goal.data || null,
+          health: getCurrentHealthDeclaration(healthRows),
+          menstrual: menstrual.data || null,
+        },
+        error: null,
+      };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async saveClientOnboardingProfile(clientId: string, values: { preferred_name: string | null; date_of_birth: string; physiological_sex: 'male' | 'female' | 'not_provided' | null; height_cm: number }): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.from('client_profile').upsert({ client_id: clientId, ...values }, { onConflict: 'client_id' }).select('client_id,preferred_name,date_of_birth,physiological_sex,height_cm').single();
+      return { data, error };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async saveClientTrainingContext(clientId: string, values: Record<string, string | null>): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.from('client_training_context').upsert({ client_id: clientId, ...values }, { onConflict: 'client_id' }).select('client_id,daily_activity_pattern,daily_steps_band,strength_training_status,experience_band,time_since_training_band,availability_days,training_location').single();
+      return { data, error };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async saveClientOnboardingWeight(clientId: string, weightKg: number, measuredOn: string): Promise<{ data: any | null; error: any }> {
+    try {
+      const existing = await supabase.from('client_weight_records').select('id,weight_kg,measured_on,recorded_at').eq('client_id', clientId).eq('weight_kg', weightKg).eq('measured_on', measuredOn).limit(1).maybeSingle();
+      if (existing.error) return { data: null, error: existing.error };
+      if (existing.data) return { data: existing.data, error: null };
+      const { data, error } = await supabase.from('client_weight_records').insert({ client_id: clientId, weight_kg: weightKg, measured_on: measuredOn }).select('id,weight_kg,measured_on,recorded_at').single();
+      return { data, error };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async saveClientOnboardingGoal(values: { primary_goal: string; primary_other_text: string | null; secondary_goals: string[] | null; secondary_other_text: string | null }): Promise<{ data: string | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('save_client_goal_state', {
+        p_primary_goal: values.primary_goal,
+        p_primary_other_text: values.primary_other_text,
+        p_secondary_goals: values.secondary_goals,
+        p_secondary_other_text: values.secondary_other_text,
+      });
+      return { data: typeof data === 'string' ? data : null, error: error || (data ? null : new Error('Supabase no confirmó el objetivo.')) };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async saveClientHealthDeclaration(clientId: string, values: { has_relevant_information: boolean; categories: string[]; body_region: string | null; description: string | null }): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data: rows, error: readError } = await supabase.from('client_health_declarations').select('id,client_id,has_relevant_information,categories,body_region,description,supersedes_id,recorded_at').eq('client_id', clientId).order('recorded_at', { ascending: true });
+      if (readError) return { data: null, error: readError };
+      const current = getCurrentHealthDeclaration(rows || []);
+      if ((rows?.length || 0) > 0 && !current) return { data: null, error: new Error('No se pudo resolver de forma segura la declaración de salud vigente.') };
+      if (sameHealthDeclaration(current, values)) return { data: current, error: null };
+      const { data, error } = await supabase.from('client_health_declarations').insert({
+        client_id: clientId,
+        ...values,
+        supersedes_id: current?.id || null,
+      }).select('id,client_id,has_relevant_information,categories,body_region,description,supersedes_id,recorded_at').single();
+      return { data, error };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async saveClientMenstrualChoice(clientId: string, values: { tracking_choice: 'yes' | 'not_now'; last_menstrual_start: string | null; usual_cycle_days: number | null; cycle_pattern: 'regular' | 'irregular' | 'unknown' | null }): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.from('client_menstrual_profile').upsert({ client_id: clientId, ...values }, { onConflict: 'client_id' }).select('client_id,tracking_choice,last_menstrual_start,usual_cycle_days,cycle_pattern').single();
+      return { data, error };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async saveClientOnboardingProgress(resumeStep: string): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('save_client_onboarding_progress', { p_flow_version: CLIENT_ONBOARDING_FLOW_VERSION, p_resume_step: resumeStep });
+      if (error) return { data: null, error };
+      if (!data || data.status !== 'in_progress' || data.resume_step !== resumeStep) return { data: null, error: new Error('Supabase no confirmó el avance del onboarding.') };
+      return { data, error: null };
+    } catch (error) { return { data: null, error }; }
+  },
+
+  async completeClientOnboarding(): Promise<{ data: any | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('complete_client_onboarding', { p_flow_version: CLIENT_ONBOARDING_FLOW_VERSION });
+      if (error) return { data: null, error };
+      if (!data || data.status !== 'completed') return { data: null, error: new Error('Supabase no confirmó la finalización del onboarding.') };
+      return { data, error: null };
+    } catch (error) { return { data: null, error }; }
   },
 
   // Programs

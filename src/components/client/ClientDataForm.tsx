@@ -12,9 +12,6 @@ export const ClientDataForm: React.FC<ClientDataFormProps> = ({ onBack }) => {
   const [avatarUrl, setAvatarUrl] = useState(activeClient.avatarUrl || '');
   const [email, setEmail] = useState(activeClient.email);
   const [phone, setPhone] = useState(activeClient.phone);
-  const [birthDate, setBirthDate] = useState(activeClient.birthDate);
-  const [sex, setSex] = useState(activeClient.sex);
-  const [height, setHeight] = useState(activeClient.height);
   const [saved, setSaved] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -36,10 +33,7 @@ export const ClientDataForm: React.FC<ClientDataFormProps> = ({ onBack }) => {
       name,
       avatarUrl,
       email,
-      phone,
-      birthDate,
-      sex,
-      height
+      phone
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -150,47 +144,6 @@ export const ClientDataForm: React.FC<ClientDataFormProps> = ({ onBack }) => {
             type="tel"
             value={phone}
             onChange={e => setPhone(e.target.value)}
-            className="w-full px-4 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-medium text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
-              NACIMIENTO
-            </label>
-            <input
-              type="date"
-              value={birthDate}
-              onChange={e => setBirthDate(e.target.value)}
-              className="w-full px-3 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-medium text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
-              SEXO
-            </label>
-            <select
-              value={sex}
-              onChange={e => setSex(e.target.value as any)}
-              className="w-full px-3 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-medium text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
-            >
-              <option value="Hombre">Hombre</option>
-              <option value="Mujer">Mujer</option>
-              <option value="Otro">Otro</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
-            ALTURA
-          </label>
-          <input
-            type="text"
-            value={height}
-            onChange={e => setHeight(e.target.value)}
             className="w-full px-4 py-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-medium text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
           />
         </div>

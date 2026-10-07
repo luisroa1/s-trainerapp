@@ -8,12 +8,12 @@ import { ClientMeasurements } from './ClientMeasurements';
 import { ClientNutrition } from './ClientNutrition';
 import { ClientProfile } from './ClientProfile';
 import { ClientDataForm } from './ClientDataForm';
-import { ClientCycle } from './ClientCycle';
 import { ClientReminders } from './ClientReminders';
 import { ClientHelp } from './ClientHelp';
 import { ClientActivate } from './ClientActivate';
 import { useApp } from '../../context/AppContext';
 import { supabaseDb } from '../../lib/supabase';
+import { resolveClientOnboardingEntry } from '../../lib/clientOnboarding.mjs';
 import type { WorkoutSessionView } from '../../types';
 
 type Tab = 'hoy' | 'entreno' | 'progreso' | 'nutricion' | 'perfil';
@@ -25,12 +25,12 @@ type Screen =
   | 'medidas'
   | 'fotos'
   | 'datos'
-  | 'ciclo'
   | 'recordatorios'
   | 'guia';
 
 export const ClientApp: React.FC = () => {
   const { activeClient, signOut, supabaseUser, loadRealClientForUser } = useApp();
+  const [onboardingGate, setOnboardingGate] = useState<{ status: 'loading' | 'error' | 'legacy' | 'completed' | 'not_started' | 'in_progress'; step?: string; preferredName?: string | null }>({ status: 'loading' });
   const [workoutSession, setWorkoutSession] = useState<WorkoutSessionView | null>(null);
   const [workoutSessionStatus, setWorkoutSessionStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [workoutSessionError, setWorkoutSessionError] = useState<string | null>(null);
@@ -51,6 +51,44 @@ export const ClientApp: React.FC = () => {
     return 'hoy';
   });
   const [activeTab, setActiveTab] = useState<Tab>('hoy');
+
+  const resolveOnboardingGate = React.useCallback(async () => {
+    if (!activeClient?.id || !supabaseUser?.id) return;
+    setOnboardingGate({ status: 'loading' });
+    const result = await supabaseDb.getClientOnboardingEntry(activeClient.id);
+    if (result.error || !result.data) {
+      setOnboardingGate({ status: 'error' });
+      return;
+    }
+    const entry = resolveClientOnboardingEntry(result.data);
+    if (entry.kind === 'unresolved') {
+      setOnboardingGate({ status: 'error' });
+      return;
+    }
+    const status: 'completed' | 'legacy' | 'not_started' | 'in_progress' = entry.kind === 'in_progress'
+      ? 'in_progress'
+      : entry.kind === 'completed'
+        ? 'completed'
+        : entry.kind === 'not_started'
+          ? 'not_started'
+          : 'legacy';
+    setOnboardingGate({ status, step: 'step' in entry ? entry.step : undefined, preferredName: result.data.preferredName });
+    const activationRoutePending = typeof window !== 'undefined' && (
+      window.location.hash.includes('activate')
+      || window.location.hash.includes('type=invite')
+      || window.location.hash.includes('type=recovery')
+      || window.location.search.includes('activate')
+      || window.location.search.includes('type=invite')
+    );
+    if (activationRoutePending) return;
+    if (entry.kind === 'not_started' || entry.kind === 'in_progress') setCurrentScreen('onboarding');
+    else setCurrentScreen('hoy');
+  }, [activeClient?.id, supabaseUser?.id]);
+
+  React.useEffect(() => {
+    if (currentScreen === 'activate') return;
+    void resolveOnboardingGate();
+  }, [resolveOnboardingGate, currentScreen === 'activate']);
 
 
   React.useEffect(() => {
@@ -170,6 +208,14 @@ export const ClientApp: React.FC = () => {
     );
   }
 
+  if (activeClient && supabaseUser?.id && currentScreen !== 'activate' && onboardingGate.status === 'loading') {
+    return <main className="min-h-screen bg-[#101012] text-[#F5F4F0] flex items-center justify-center p-6"><p role="status" className="text-sm text-[#B5B5BC]">Comprobando tu perfil…</p></main>;
+  }
+
+  if (activeClient && supabaseUser?.id && currentScreen !== 'activate' && onboardingGate.status === 'error') {
+    return <main className="min-h-screen bg-[#101012] text-[#F5F4F0] flex items-center justify-center p-6"><section className="w-full max-w-md rounded-2xl border border-white/10 bg-[#1B1B1F] p-6 text-center"><h1 className="text-xl font-bold">No pudimos comprobar tu perfil</h1><p className="mt-3 text-sm text-[#A0A0A8]">No cambiaremos tu acceso mientras no podamos confirmar el estado guardado.</p><button type="button" onClick={() => void resolveOnboardingGate()} className="mt-6 min-h-12 w-full rounded-xl bg-cyan-300 px-4 py-3 font-semibold text-[#101012]">Reintentar</button><button type="button" onClick={() => void signOut()} className="mt-3 min-h-12 w-full rounded-xl border border-[#3A3A40] px-4 py-3">Cerrar sesión</button></section></main>;
+  }
+
   return (
     <div className="relative w-full h-full max-w-[430px] mx-auto bg-[#101012] text-[#F5F4F0] flex flex-col overflow-hidden">
       {/* Screen View Container */}
@@ -185,13 +231,20 @@ export const ClientApp: React.FC = () => {
                 setCurrentScreen('hoy');
               })();
             }}
-            onGoToLogin={() => setCurrentScreen('onboarding')}
+            onGoToLogin={() => { void signOut(); }}
           />
         )}
 
         {currentScreen === 'onboarding' && (
           <ClientOnboarding 
-            onFinishOnboarding={() => setCurrentScreen('hoy')}
+            clientId={activeClient.id}
+            registeredName={activeClient.name}
+            preferredName={onboardingGate.preferredName}
+            initialStep={(onboardingGate.step || 'welcome') as any}
+            onFinishOnboarding={(preferredName) => {
+              setOnboardingGate(current => ({ ...current, status: 'completed', preferredName }));
+              setCurrentScreen('hoy');
+            }}
           />
         )}
 
@@ -200,6 +253,7 @@ export const ClientApp: React.FC = () => {
             openWorkoutSession={workoutSession?.session.completed_at ? null : workoutSession}
             workoutSessionStatus={workoutSessionStatus}
             workoutSessionError={workoutSessionError}
+            displayName={onboardingGate.preferredName}
             onStartWorkout={(programDayId) => void startWorkout(programDayId)}
             onContinueWorkout={continueWorkout}
             onRetryWorkoutSession={() => void retryOpenWorkoutSession()}
@@ -232,15 +286,12 @@ export const ClientApp: React.FC = () => {
           <ClientProfile
             onNavigateSubscreen={(sub) => setCurrentScreen(sub as Screen)}
             onLogout={() => setCurrentScreen('onboarding')}
+            preferredName={onboardingGate.preferredName}
           />
         )}
 
         {currentScreen === 'datos' && (
           <ClientDataForm onBack={() => setCurrentScreen('perfil')} />
-        )}
-
-        {currentScreen === 'ciclo' && (
-          <ClientCycle onBack={() => setCurrentScreen('perfil')} />
         )}
 
         {currentScreen === 'recordatorios' && (

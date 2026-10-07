@@ -4,7 +4,6 @@ import {
   User,
   Ruler,
   Camera,
-  Moon,
   Droplet,
   Bell, 
   HelpCircle, 
@@ -12,13 +11,15 @@ import {
 } from 'lucide-react';
 
 interface ClientProfileProps {
-  onNavigateSubscreen: (subscreen: 'datos' | 'medidas' | 'fotos' | 'ciclo' | 'recordatorios' | 'guia') => void;
+  onNavigateSubscreen: (subscreen: 'datos' | 'medidas' | 'fotos' | 'recordatorios' | 'guia') => void;
   onLogout: () => void;
+  preferredName?: string | null;
 }
 
 export const ClientProfile: React.FC<ClientProfileProps> = ({
   onNavigateSubscreen,
-  onLogout
+  onLogout,
+  preferredName
 }) => {
   const { activeClient, updateClientPhoto, supabaseUser, userRole, signOut, supabaseStatus } = useApp();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -76,7 +77,7 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
         </div>
         <div>
           <h2 className="text-lg font-bold font-display text-[#F5F4F0] leading-tight">
-            {activeClient.name}
+            {preferredName?.trim() || activeClient.name}
           </h2>
           <p className="text-xs text-[#8E8E94] mt-0.5">
             {activeClient.objective}
@@ -129,25 +130,6 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
             <span className="text-xs font-semibold text-[#F5F4F0]">Registros corporales</span>
           </div>
           <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
-        </div>
-
-        {/* Ciclo menstrual */}
-        <div
-          onClick={() => onNavigateSubscreen('ciclo')}
-          className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <Moon className="w-4 h-4 text-[#E8A0C4]" />
-            <span className="text-xs font-semibold text-[#F5F4F0]">Ciclo menstrual</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {activeClient.menstrualTracking?.enabled && (
-              <span className="text-[10px] text-[#E8A0C4] bg-[#E8A0C4]/15 px-2 py-0.5 rounded-full font-bold">
-                Día {activeClient.menstrualTracking.day ?? 'Sin dato'}
-              </span>
-            )}
-            <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
-          </div>
         </div>
 
         {/* Recordatorios */}

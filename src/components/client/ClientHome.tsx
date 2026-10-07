@@ -2,7 +2,7 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { programFromActiveAssignment } from '../../lib/clientProgramAssignment.mjs';
 import { ProgramDay, WorkoutSessionView } from '../../types';
-import { User, Bell, MessageSquare, Moon, Dumbbell, ChevronRight } from 'lucide-react';
+import { User, Bell, MessageSquare, Dumbbell, ChevronRight } from 'lucide-react';
 import heroTrainingPhoto from '../../assets/hero-training.jpg';
 
 interface ClientHomeProps {
@@ -13,12 +13,13 @@ interface ClientHomeProps {
   openWorkoutSession: WorkoutSessionView | null;
   workoutSessionStatus: 'loading' | 'loaded' | 'error';
   workoutSessionError: string | null;
+  displayName?: string | null;
 }
 
-export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContinueWorkout, onRetryWorkoutSession, onNavigateTab, openWorkoutSession, workoutSessionStatus, workoutSessionError }) => {
+export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContinueWorkout, onRetryWorkoutSession, onNavigateTab, openWorkoutSession, workoutSessionStatus, workoutSessionError, displayName }) => {
   const { activeClient, appName, activeProgramAssignment, activeProgramAssignmentStatus, activeProgramAssignmentError } = useApp();
 
-  const firstName = activeClient?.name ? (activeClient.name.split(' ')[0] || 'Jesús') : 'Jesús';
+  const firstName = (displayName?.trim() || activeClient?.name?.trim() || '').split(/\s+/)[0];
 
   // The active immutable snapshot is the sole Client prescription source.
   const assignedProgram = programFromActiveAssignment(activeProgramAssignment) as {
@@ -29,7 +30,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
   const programDays = assignedProgram?.days || [];
   const firstExerciseTip = programDays.flatMap(day => day.exercises).find(exercise => exercise.trainerTip)?.trainerTip;
   const cleanExerciseTip = firstExerciseTip ? firstExerciseTip.replace(/^Tu entrenador:\s*/i, '').trim() : null;
-  const trainerMessage = cleanExerciseTip || 'Sigue las indicaciones de cada ejercicio.';
+  const trainerMessage = cleanExerciseTip;
 
   return (
     <div className="flex flex-col min-h-full pb-[76px] px-5 pt-3 bg-[#101012] text-[#F5F4F0]">
@@ -71,31 +72,9 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
       {/* Greeting */}
       <div className="mb-4">
         <h2 className="text-2xl font-extrabold font-display text-[#F5F4F0] tracking-tight">
-          Hola, {firstName}
+          Hola{firstName ? `, ${firstName}` : ''}
         </h2>
       </div>
-
-      {/* Menstrual Phase Banner (if enabled and shared, as in page 35) */}
-      {activeClient.menstrualTracking?.enabled && (
-        <div 
-          onClick={() => onNavigateTab('perfil')}
-          className="mb-4 p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#E8A0C4]/30 flex items-start gap-3 cursor-pointer hover:border-[#E8A0C4]/60 transition-colors"
-        >
-          <div className="w-7 h-7 rounded-full bg-[#E8A0C4]/15 text-[#E8A0C4] flex items-center justify-center shrink-0 mt-0.5">
-            <Moon className="w-4 h-4" />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#E8A0C4]">
-                Fase menstrual — día {activeClient.menstrualTracking.day ?? 'Sin dato'}
-              </span>
-            </div>
-            <p className="text-[11px] text-[#8E8E94] mt-0.5 leading-snug">
-              {activeClient.menstrualTracking.advice || 'Sin información registrada.'}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* CORE 1D: el Client elige explícitamente un día del snapshot; el calendario no registra sesiones. */}
       <div className="relative rounded-[24px] border border-[#2A2A2F] mb-3 shadow-2xl overflow-hidden">
@@ -127,8 +106,8 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
             <p role="alert" className="text-sm text-red-300">{activeProgramAssignmentError || 'No se pudo cargar tu prescripción.'}</p>
           ) : !activeProgramAssignment ? (
             <div>
-              <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">Sin programa asignado</h3>
-              <p className="text-xs text-[#8E8E94] mt-1">Tu entrenador podrá asignarte una prescripción.</p>
+              <h3 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">Tu entrenador está preparando tu planificación</h3>
+              <p className="text-xs text-[#8E8E94] mt-1">Cuando esté lista, aparecerá aquí.</p>
             </div>
           ) : programDays.length === 0 ? (
             <div>

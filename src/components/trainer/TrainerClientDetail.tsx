@@ -4,7 +4,6 @@ import {
   MessageSquare, 
   Apple, 
   Dumbbell, 
-  Moon, 
   Plus, 
   Send 
 } from 'lucide-react';
@@ -119,10 +118,6 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
     setChatMessage('');
   };
 
-  const sharedCyclePhase = client.sex === 'Mujer' && client.menstrualTracking?.sharedWithTrainer
-    ? client.menstrualTracking.phase
-    : undefined;
-
   return (
     <div className="p-8 max-w-[1240px] mx-auto pb-24">
       {/* Top Header */}
@@ -156,12 +151,6 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-[#CFFF5C]" />
                 Activo
               </span>
-              {sharedCyclePhase && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E8A0C4]/15 text-[#E8A0C4] border border-[#E8A0C4]/30">
-                  <Moon className="w-3 h-3" />
-                  Fase {sharedCyclePhase.toLowerCase()}
-                </span>
-              )}
             </div>
             <p className="text-xs text-[#8E8E94] mt-0.5">
               {client.objective || 'Sin objetivo registrado'} · {activeProgram?.name || 'Sin programa asignado'}

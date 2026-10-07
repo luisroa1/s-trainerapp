@@ -92,9 +92,14 @@ describe('TrainerClientDetail legacy persisted shapes', () => {
     assert.doesNotMatch(html, /PASOS[\s\S]*?>\s*0\s*</);
   });
 
-  test('partial menstrual tracking without phase does not claim a phase', () => {
-    const html = renderDetail({ ...minimalClient, sex: 'Mujer', menstrualTracking: { sharedWithTrainer: true } });
-    assert.doesNotMatch(html, /Fase undefined/);
+  test('legacy shared menstrual phase is never rendered as current Trainer information', () => {
+    const html = renderDetail({
+      ...minimalClient,
+      sex: 'Mujer',
+      menstrualTracking: { sharedWithTrainer: true, phase: 'Folicular' },
+    });
+    assert.doesNotMatch(html, /Fase folicular/i);
+    assert.doesNotMatch(html, /client_menstrual_profile|last_menstrual_start|cycle_pattern/i);
   });
 
   test('deserialization preserves missing and zero weight instead of synthesizing 70', () => {

@@ -166,6 +166,38 @@ export const supabaseDb = {
     }
   },
 
+  // Trainer read-only projection of canonical onboarding facts. RLS limits all
+  // rows to the authenticated Trainer's assigned Clients. Menstrual profile
+  // and onboarding state are intentionally excluded: neither is Trainer-readable.
+  async getTrainerClientProfile(clientId: string): Promise<{ data: any | null; error: any }> {
+    try {
+      const [profile, training, weight, goal, health] = await Promise.all([
+        supabase.from('client_profile').select('preferred_name,date_of_birth,physiological_sex,height_cm').eq('client_id', clientId).maybeSingle(),
+        supabase.from('client_training_context').select('daily_activity_pattern,daily_steps_band,strength_training_status,experience_band,time_since_training_band,availability_days,training_location').eq('client_id', clientId).maybeSingle(),
+        supabase.from('client_weight_records').select('weight_kg,measured_on,recorded_at').eq('client_id', clientId).order('measured_on', { ascending: false }).order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('client_goal_history').select('primary_goal,primary_other_text,secondary_goals,secondary_other_text,started_at,ended_at').eq('client_id', clientId).is('ended_at', null).maybeSingle(),
+        supabase.from('client_health_declarations').select('id,client_id,has_relevant_information,categories,body_region,description,supersedes_id,recorded_at').eq('client_id', clientId).order('recorded_at', { ascending: true }),
+      ]);
+      const error = profile.error || training.error || weight.error || goal.error || health.error;
+      if (error) return { data: null, error };
+      const healthRows = health.data || [];
+      const healthDeclaration = getCurrentHealthDeclaration(healthRows);
+      return {
+        data: {
+          profile: profile.data || null,
+          training: training.data || null,
+          latestWeight: weight.data || null,
+          goal: goal.data || null,
+          health: healthDeclaration,
+          healthStatus: healthRows.length === 0 ? 'unreported' : healthDeclaration ? 'available' : 'ambiguous',
+        },
+        error: null,
+      };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
   async saveClientOnboardingProfile(clientId: string, values: { preferred_name: string | null; date_of_birth: string; physiological_sex: 'male' | 'female' | 'not_provided' | null; height_cm: number }): Promise<{ data: any | null; error: any }> {
     try {
       const { data, error } = await supabase.from('client_profile').upsert({ client_id: clientId, ...values }, { onConflict: 'client_id' }).select('client_id,preferred_name,date_of_birth,physiological_sex,height_cm').single();

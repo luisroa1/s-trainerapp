@@ -13,6 +13,7 @@ import { supabaseDb } from '../../lib/supabase';
 import type { TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
 import { formatPerformedLoad, formatPerformedMeasure, plannedPerformedRows } from '../../lib/trainerWorkoutHistory.mjs';
 import { ClientPathologiesSummary } from './ClientPathologiesSummary';
+import { TrainerClientProfilePanel } from './TrainerClientProfilePanel';
 import { TrainerNutritionLogHistory } from './TrainerNutritionLogHistory';
 
 interface TrainerClientDetailProps {
@@ -202,6 +203,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
       {assignmentMessage && <p role="status" className="mb-4 text-xs text-emerald-300">{assignmentMessage}</p>}
 
       <ClientPathologiesSummary pathologies={client.pathologies} />
+      <TrainerClientProfilePanel client={client} />
 
       {/* Tabs Row */}
       <div className="flex items-center gap-6 border-b border-[#2A2A2F] mb-6 text-xs font-semibold">

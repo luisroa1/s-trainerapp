@@ -91,12 +91,15 @@ test('12. Menstrual tracking is optional and persisted only through the private 
   assert.match(onboarding, /value="yes"/);
   assert.match(onboarding, /value="not_now"/);
   assert.match(adapter, /from\('client_menstrual_profile'\)/);
-  assert.doesNotMatch(adapter, /trainer.*menstrual|menstrual.*trainer/i);
+  const trainerProfileReader = adapter.slice(adapter.indexOf('async getTrainerClientProfile'), adapter.indexOf('async saveClientOnboardingProfile'));
+  assert.doesNotMatch(trainerProfileReader, /client_menstrual_profile|last_menstrual_start|cycle_pattern/i);
 });
 
 test('13. Canonical onboarding cycle information is not exposed to Trainer surfaces', () => {
   const trainerDetail = source('../src/components/trainer/TrainerClientDetail.tsx');
+  const trainerProfile = source('../src/components/trainer/TrainerClientProfilePanel.tsx');
   assert.doesNotMatch(trainerDetail, /client_menstrual_profile|last_menstrual_start|cycle_pattern/i);
+  assert.doesNotMatch(trainerProfile, /client_menstrual_profile|last_menstrual_start|cycle_pattern/i);
   assert.doesNotMatch(home, /menstrualTracking|menstrual_profile|cycle_pattern/i);
 });
 

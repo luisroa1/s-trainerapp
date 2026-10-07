@@ -142,7 +142,7 @@ export const TrainerApp: React.FC = () => {
               </span>
             </div>
             <p className="text-[7.5px] tracking-widest text-[#8E8E94] font-bold uppercase leading-tight mb-3">
-              PLANIFICACIÓN · ADHERENCIA · PROGRESIÓN
+              PLANIFICACIÓN · EJECUCIÓN · HISTORIAL
             </p>
             
             {/* Supabase Status Pill */}
@@ -232,7 +232,7 @@ export const TrainerApp: React.FC = () => {
               }`}
             >
               <Sparkles className="w-4 h-4 text-[var(--accent-color,#CFFF5C)]" />
-              <span>Asistente IA</span>
+              <span>Asistente</span>
             </button>
 
             <button

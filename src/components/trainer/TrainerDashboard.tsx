@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Search, Plus, AlertTriangle, Clock } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { ClientData } from '../../types';
 
 interface TrainerDashboardProps {
@@ -21,7 +21,6 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
   );
 
   const activeCount = clients.filter(c => c.status === 'Activo').length;
-  const alertCount = clients.filter(c => c.alert).length;
 
   return (
     <div className="p-8 max-w-[1240px] mx-auto">
@@ -32,7 +31,7 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
             Mis clientes
           </h1>
           <p className="text-xs text-[#8E8E94] mt-1">
-            {activeCount} clientes activos · {alertCount} alertas pendientes
+            {activeCount} clientes activos
           </p>
         </div>
 
@@ -93,18 +92,12 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
             <tr className="border-b border-[#2A2A2F] text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider">
               <th className="py-4 px-6">CLIENTE</th>
               <th className="py-4 px-4">ESTADO</th>
-              <th className="py-4 px-4">PRÓXIMO ENTRENO</th>
-              <th className="py-4 px-4">ADHERENCIA</th>
-              <th className="py-4 px-4">PESO</th>
-              <th className="py-4 px-4">CHECK-IN</th>
-              <th className="py-4 px-6 text-center">ALERTA</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#2A2A2F]/50 text-xs">
             {filteredClients.map((client) => {
               const isActivo = client.status === 'Activo';
               const isPausado = client.status === 'Pausado';
-              const isPendiente = client.status === 'Pendiente';
 
               return (
                 <tr
@@ -161,65 +154,6 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
                     </span>
                   </td>
 
-                  {/* PRÓXIMO ENTRENO */}
-                  <td className="py-4 px-4 text-[#F5F4F0] font-medium">
-                    {client.nextWorkout}
-                  </td>
-
-                  {/* ADHERENCIA */}
-                  <td className="py-4 px-4">
-                    {client.status !== 'Pendiente' ? (
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-bold text-[#F5F4F0] w-9">
-                          {client.adherencePercentage} %
-                        </span>
-                        <div className="w-20 h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              backgroundColor: 'var(--accent-color, #CFFF5C)',
-                              width: `${client.adherencePercentage}%`
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-[#5C5C62]">—</span>
-                    )}
-                  </td>
-
-                  {/* PESO */}
-                  <td className="py-4 px-4 font-semibold text-[#5CD6FF]">
-                    {client.status !== 'Pendiente' && typeof client.currentWeight === 'number'
-                      ? `${client.currentWeight.toFixed(1).replace('.', ',')} kg`
-                      : '—'}
-                  </td>
-
-                  {/* CHECK-IN */}
-                  <td className="py-4 px-4 text-[#8E8E94]">
-                    {client.lastCheckIn}
-                  </td>
-
-                  {/* ALERTA */}
-                  <td className="py-4 px-6 text-center">
-                    {client.alert ? (
-                      <div
-                        className="inline-flex items-center justify-center p-1 text-[#FF6B4A]"
-                        title={client.alert.message}
-                      >
-                        <AlertTriangle className="w-4 h-4 fill-current/20" />
-                      </div>
-                    ) : isPendiente ? (
-                      <div
-                        className="inline-flex items-center justify-center p-1 text-[#8E8E94]"
-                        title="Invitación pendiente"
-                      >
-                        <Clock className="w-4 h-4" />
-                      </div>
-                    ) : (
-                      <span className="text-[#3A3A40]">—</span>
-                    )}
-                  </td>
                 </tr>
               );
             })}

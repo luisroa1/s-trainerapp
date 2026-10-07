@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Camera, Plus, Scale, Check } from 'lucide-react';
+import { ArrowLeft, Scale } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface ClientMeasurementsProps {
@@ -9,10 +9,10 @@ interface ClientMeasurementsProps {
 export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }) => {
   const { activeClient, updateClient } = useApp();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [cintura, setCintura] = useState(activeClient.bodyMeasurements.cintura);
-  const [cadera, setCadera] = useState(activeClient.bodyMeasurements.cadera);
-  const [pecho, setPecho] = useState(activeClient.bodyMeasurements.pecho);
-  const [brazo, setBrazo] = useState(activeClient.bodyMeasurements.brazo);
+  const [cintura, setCintura] = useState(activeClient.bodyMeasurements?.cintura?.toString() ?? '');
+  const [cadera, setCadera] = useState(activeClient.bodyMeasurements?.cadera?.toString() ?? '');
+  const [pecho, setPecho] = useState(activeClient.bodyMeasurements?.pecho?.toString() ?? '');
+  const [brazo, setBrazo] = useState(activeClient.bodyMeasurements?.brazo?.toString() ?? '');
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -22,13 +22,25 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
   };
 
   const handleSaveMeasurements = () => {
+    const parse = (value: string) => value.trim() === '' ? undefined : Number(value);
+    const nextValues = {
+      cintura: parse(cintura),
+      cadera: parse(cadera),
+      pecho: parse(pecho),
+      brazo: parse(brazo),
+    };
+    const providedValues = Object.fromEntries(
+      Object.entries(nextValues).filter(([, value]) => value !== undefined && Number.isFinite(value))
+    );
+    if (Object.keys(providedValues).length === 0) {
+      triggerToast('Introduce al menos una medida.');
+      return;
+    }
     updateClient(activeClient.id, {
       bodyMeasurements: {
-        cintura,
-        cadera,
-        pecho,
-        brazo,
-        lastUpdated: 'Actualizadas hoy'
+        ...activeClient.bodyMeasurements,
+        ...providedValues,
+        lastUpdated: new Date().toISOString()
       }
     });
     setShowUpdateModal(false);
@@ -46,7 +58,7 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
           <ArrowLeft className="w-4 h-4" />
         </button>
         <h2 className="text-xl font-extrabold font-display text-[#F5F4F0]">
-          Fotos y medidas
+          Medidas
         </h2>
       </div>
 
@@ -57,82 +69,18 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
         </div>
       )}
 
-      {/* Fotos de progreso */}
-      <div className="mb-6">
-        <h3 className="text-xs font-bold text-[#F5F4F0] mb-0.5">
-          Fotos de progreso
-        </h3>
-        <p className="text-[11px] text-[#8E8E94] mb-3">
-          Privadas — solo tu entrenador puede verlas.
-        </p>
-
-        <div className="grid grid-cols-3 gap-2.5 mb-3">
-          {/* Frontal */}
-          <div className="flex flex-col items-center">
-            <div className="w-full aspect-3/4 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col items-center justify-center p-3 relative overflow-hidden group">
-              <Camera className="w-5 h-5 text-[#5C5C62] group-hover:text-[#F5F4F0] transition-colors" />
-              <span className="text-[9px] text-[#5C5C62] mt-2 font-medium">HACE 5 DÍAS</span>
-            </div>
-            <span className="text-[11px] text-[#8E8E94] mt-1.5 font-medium">Frontal</span>
-          </div>
-
-          {/* Lateral */}
-          <div className="flex flex-col items-center">
-            <div className="w-full aspect-3/4 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col items-center justify-center p-3 relative overflow-hidden group">
-              <Camera className="w-5 h-5 text-[#5C5C62] group-hover:text-[#F5F4F0] transition-colors" />
-              <span className="text-[9px] text-[#5C5C62] mt-2 font-medium">HACE 5 DÍAS</span>
-            </div>
-            <span className="text-[11px] text-[#8E8E94] mt-1.5 font-medium">Lateral</span>
-          </div>
-
-          {/* Espalda */}
-          <div className="flex flex-col items-center">
-            <div 
-              onClick={() => triggerToast('Foto de espalda lista para subir')}
-              className="w-full aspect-3/4 rounded-[14px] bg-[#16161A] border-2 border-dashed border-[#2A2A2F] hover:border-[var(--accent-color,#CFFF5C)] flex flex-col items-center justify-center p-3 cursor-pointer transition-colors"
-            >
-              <Plus className="w-5 h-5 text-[var(--accent-color,#CFFF5C)]" />
-              <span className="text-[10px] font-bold text-[var(--accent-color,#CFFF5C)] mt-1.5">Espalda</span>
-            </div>
-            <span className="text-[11px] text-[#8E8E94] mt-1.5 font-medium">Espalda</span>
-          </div>
-        </div>
-
-        <button
-          onClick={() => triggerToast('Selector de cámara / galería abierto')}
-          className="w-full py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] flex items-center justify-center gap-2 transition-colors"
-        >
-          <Camera className="w-4 h-4 text-[#8E8E94]" />
-          Subir nuevas fotos
-        </button>
-      </div>
-
       {/* Impedanciometría */}
       <div className="mb-6">
         <h3 className="text-xs font-bold text-[#F5F4F0] mb-0.5">
           Impedanciometría
         </h3>
         <p className="text-[11px] text-[#8E8E94] mb-3">
-          Sube la foto de tu báscula y registra el peso y la composición.
+          Registros guardados disponibles.
         </p>
-
-        {/* Añadir registro card */}
-        <div 
-          onClick={() => triggerToast('Foto de báscula e impedancia adjuntada')}
-          className="p-3.5 rounded-[14px] bg-[#16161A] border-2 border-dashed border-[#2A2A2F] hover:border-[var(--accent-color,#CFFF5C)] flex items-center gap-3 mb-3 cursor-pointer transition-colors"
-        >
-          <div className="w-8 h-8 rounded-lg bg-[#232328] flex items-center justify-center text-[var(--accent-color,#CFFF5C)]">
-            <Scale className="w-4 h-4" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-[#F5F4F0]">Añadir registro</h4>
-            <p className="text-[10px] text-[#8E8E94]">Foto de la báscula + peso</p>
-          </div>
-        </div>
 
         {/* History items */}
         <div className="space-y-2">
-          {activeClient.impedanceHistory.map((item, idx) => (
+          {(activeClient.impedanceHistory ?? []).map((item, idx) => (
             <div key={idx} className="p-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-7 h-7 rounded-lg bg-[#16161A] flex items-center justify-center text-[#8E8E94]">
@@ -156,6 +104,9 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
               </span>
             </div>
           ))}
+          {(activeClient.impedanceHistory ?? []).length === 0 && (
+            <p className="text-[11px] text-[#8E8E94]">Sin registros de impedanciometría.</p>
+          )}
         </div>
       </div>
 
@@ -176,19 +127,19 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
         <div className="space-y-2">
           <div className="p-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
             <span className="text-xs text-[#8E8E94]">Cintura</span>
-            <span className="text-xs font-bold text-[#F5F4F0]">{activeClient.bodyMeasurements.cintura} cm</span>
+            <span className="text-xs font-bold text-[#F5F4F0]">{typeof activeClient.bodyMeasurements?.cintura === 'number' ? `${activeClient.bodyMeasurements.cintura} cm` : 'Sin datos'}</span>
           </div>
           <div className="p-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
             <span className="text-xs text-[#8E8E94]">Cadera</span>
-            <span className="text-xs font-bold text-[#F5F4F0]">{activeClient.bodyMeasurements.cadera} cm</span>
+            <span className="text-xs font-bold text-[#F5F4F0]">{typeof activeClient.bodyMeasurements?.cadera === 'number' ? `${activeClient.bodyMeasurements.cadera} cm` : 'Sin datos'}</span>
           </div>
           <div className="p-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
             <span className="text-xs text-[#8E8E94]">Pecho</span>
-            <span className="text-xs font-bold text-[#F5F4F0]">{activeClient.bodyMeasurements.pecho} cm</span>
+            <span className="text-xs font-bold text-[#F5F4F0]">{typeof activeClient.bodyMeasurements?.pecho === 'number' ? `${activeClient.bodyMeasurements.pecho} cm` : 'Sin datos'}</span>
           </div>
           <div className="p-3 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between">
             <span className="text-xs text-[#8E8E94]">Brazo</span>
-            <span className="text-xs font-bold text-[#F5F4F0]">{activeClient.bodyMeasurements.brazo} cm</span>
+            <span className="text-xs font-bold text-[#F5F4F0]">{typeof activeClient.bodyMeasurements?.brazo === 'number' ? `${activeClient.bodyMeasurements.brazo} cm` : 'Sin datos'}</span>
           </div>
         </div>
       </div>
@@ -207,7 +158,7 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
                 <input
                   type="number"
                   value={cintura}
-                  onChange={e => setCintura(Number(e.target.value))}
+                  onChange={e => setCintura(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-sm text-[#F5F4F0] focus:border-[#CFFF5C] focus:outline-none"
                 />
               </div>
@@ -216,7 +167,7 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
                 <input
                   type="number"
                   value={cadera}
-                  onChange={e => setCadera(Number(e.target.value))}
+                  onChange={e => setCadera(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-sm text-[#F5F4F0] focus:border-[#CFFF5C] focus:outline-none"
                 />
               </div>
@@ -225,7 +176,7 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
                 <input
                   type="number"
                   value={pecho}
-                  onChange={e => setPecho(Number(e.target.value))}
+                  onChange={e => setPecho(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-sm text-[#F5F4F0] focus:border-[#CFFF5C] focus:outline-none"
                 />
               </div>
@@ -234,7 +185,7 @@ export const ClientMeasurements: React.FC<ClientMeasurementsProps> = ({ onBack }
                 <input
                   type="number"
                   value={brazo}
-                  onChange={e => setBrazo(Number(e.target.value))}
+                  onChange={e => setBrazo(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-sm text-[#F5F4F0] focus:border-[#CFFF5C] focus:outline-none"
                 />
               </div>

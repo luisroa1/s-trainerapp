@@ -3,6 +3,7 @@ import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerPro
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
+import { clientFieldsFromPersistedData, readOptionalPersistedNumber } from './clientLegacyFields.mjs';
 import { workoutSessionFromRpc } from './workoutExecution.mjs';
 import { buildTrainerWorkoutHistory } from './trainerWorkoutHistory.mjs';
 
@@ -39,7 +40,6 @@ export const serializeClientToDb = (client: ClientData, ownerId?: string) => {
     objective: client.objective,
     status: client.status,
     current_weight: client.currentWeight,
-    adherence_percentage: client.adherencePercentage,
     // Program assignment is written only by invite-client. Generic client
     // upserts must not create or restore it from React/localStorage state.
     data: clientDataWithoutLegacyAssignment(client), // Structured compatibility data
@@ -56,10 +56,12 @@ export const serializeClientToDb = (client: ClientData, ownerId?: string) => {
 };
 
 export const deserializeClientFromDb = (row: any): ClientData => {
-  if (row.data && typeof row.data === 'object' && row.data.name) {
+  const persistedFields = clientFieldsFromPersistedData(row.data);
+  if (persistedFields.name) {
     const currentWeight = readCurrentWeight(row);
+    const adherencePercentage = readOptionalPersistedNumber(row.adherence_percentage ?? row.data?.adherencePercentage);
     return {
-      ...row.data,
+      ...persistedFields,
       id: row.id,
       name: row.name || row.data.name,
       email: row.email || row.data.email,
@@ -67,13 +69,13 @@ export const deserializeClientFromDb = (row: any): ClientData => {
       objective: row.objective || row.data.objective,
       status: row.status || row.data.status,
       ...(currentWeight !== undefined ? { currentWeight } : {}),
-      adherencePercentage: Number(row.adherence_percentage || row.data.adherencePercentage || 100),
+      ...(adherencePercentage !== undefined ? { adherencePercentage } : {}),
       assignedProgramId: readAssignedProgramId(row),
       trainerId: row.trainer_id || row.data.trainerId
     };
   }
   return {
-    ...(row.data as ClientData),
+    ...persistedFields,
     trainerId: row.trainer_id || (row.data as any)?.trainerId,
     assignedProgramId: readAssignedProgramId(row)
   };
@@ -81,9 +83,7 @@ export const deserializeClientFromDb = (row: any): ClientData => {
 
 const readCurrentWeight = (row: any): number | undefined => {
   const value = row.current_weight ?? row.data?.currentWeight;
-  if (value === null || value === undefined || value === '') return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  return readOptionalPersistedNumber(value);
 };
 
 // Database Read/Write Operations with graceful fallback

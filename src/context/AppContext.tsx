@@ -257,18 +257,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!client.name && data.name) client.name = data.name;
       if (!client.trainerId && data.trainer_id) client.trainerId = data.trainer_id;
       if (!client.weeklySchedule) client.weeklySchedule = [];
-      if (!client.metrics) {
-        client.metrics = {
-          stepsToday: 0,
-          stepsGoal: 10000,
-          kcalToday: 0,
-          kcalGoal: 2000,
-          sleepHours: '7.5',
-          sleepQuality: 'Bueno',
-          waterLiters: 2,
-          waterGoal: 2.5
-        };
-      }
 
       setRealClient(client);
       setActiveClientId(client.id);
@@ -779,7 +767,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addClient = (clientData: Partial<ClientData>) => {
     const newId = `cli-${Date.now()}`;
-    const initials = (clientData.name || 'Nuevo')
+    const name = clientData.name?.trim() ?? '';
+    const initials = name
       .split(' ')
       .map(w => w[0])
       .slice(0, 2)
@@ -787,57 +776,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .toUpperCase();
 
     const newClient: ClientData = {
+      ...clientData,
       id: newId,
-      name: clientData.name || 'Nuevo Cliente',
-      initials: initials || 'NC',
-      email: clientData.email || '',
-      phone: clientData.phone || '',
-      birthDate: clientData.birthDate || '1995-01-01',
-      sex: clientData.sex || 'Hombre',
-      height: clientData.height || '175 cm',
-      objective: clientData.objective || 'Hipertrofia',
-      status: clientData.status || 'Activo',
-      nextWorkout: 'Hoy · Inicio',
-      adherencePercentage: 100,
-      completedWorkoutsCount: 0,
-      totalScheduledWorkoutsCount: 4,
-      currentWeight: clientData.currentWeight || 75.0,
-      initialWeight: clientData.currentWeight || 75.0,
-      targetWeight: clientData.targetWeight || 72.0,
-      weightWeeklyTrend: '→ 0,0 kg / semana',
-      lastCheckIn: 'Hoy',
-      ...(clientData.pathologies ? { pathologies: clientData.pathologies } : {}),
-      menstrualTracking: clientData.menstrualTracking || {
-        enabled: false,
-        sharedWithTrainer: false,
-        day: 0,
-        phase: 'Folicular',
-        advice: ''
-      },
-      metrics: {
-        stepsToday: 4500,
-        stepsGoal: 9000,
-        kcalToday: 1200,
-        kcalGoal: 2200,
-        sleepHours: '7h 30min',
-        sleepQuality: 'Buena',
-        waterLiters: 1.5,
-        waterGoal: 2.5
-      },
-      assignedProgramId: clientData.assignedProgramId || '',
-      weeklySchedule: [
-        { day: 'L', status: 'completed' },
-        { day: 'M', status: 'pending' },
-        { day: 'X', status: 'rest' },
-        { day: 'J', status: 'pending' },
-        { day: 'V', status: 'pending' },
-        { day: 'S', status: 'rest' },
-        { day: 'D', status: 'rest' },
-      ],
-      strengthProgression: [],
-      bodyMeasurements: { cintura: 80, cadera: 95, pecho: 98, brazo: 34, lastUpdated: 'Reciente' },
-      impedanceHistory: [{ date: 'HOY', weight: clientData.currentWeight || 75.0, fatPercentage: 18.0, muscleMassKg: 58.0, waterPercentage: 55 }],
-      trainerNotes: [{ id: `tn-${Date.now()}`, date: 'Hoy', content: 'Alta creada por el entrenador.' }]
+      name,
+      initials,
+      email: clientData.email ?? '',
+      phone: clientData.phone ?? '',
+      birthDate: clientData.birthDate ?? '',
+      sex: clientData.sex ?? 'Otro',
+      height: clientData.height ?? '',
+      objective: clientData.objective ?? '',
+      status: clientData.status ?? 'Pendiente',
+      assignedProgramId: clientData.assignedProgramId ?? '',
+      weeklySchedule: clientData.weeklySchedule ?? []
     };
 
     setClients(prev => [newClient, ...prev]);

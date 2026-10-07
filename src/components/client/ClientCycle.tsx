@@ -8,19 +8,14 @@ interface ClientCycleProps {
 
 export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
   const { activeClient, updateClient } = useApp();
-  const tracking = activeClient.menstrualTracking || {
-    enabled: true,
-    sharedWithTrainer: true,
-    day: 3,
-    phase: 'Menstrual',
-    advice: 'Es normal sentir menos energía estos días. Puedes bajar la intensidad si lo necesitas.'
-  };
+  const tracking = activeClient.menstrualTracking;
 
   const handleToggleEnabled = () => {
     updateClient(activeClient.id, {
       menstrualTracking: {
         ...tracking,
-        enabled: !tracking.enabled
+        enabled: tracking?.enabled !== true,
+        sharedWithTrainer: tracking?.sharedWithTrainer ?? false,
       }
     });
   };
@@ -29,7 +24,8 @@ export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
     updateClient(activeClient.id, {
       menstrualTracking: {
         ...tracking,
-        sharedWithTrainer: !tracking.sharedWithTrainer
+        enabled: tracking?.enabled ?? false,
+        sharedWithTrainer: tracking?.sharedWithTrainer !== true,
       }
     });
   };
@@ -76,19 +72,19 @@ export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
         <button
           onClick={handleToggleEnabled}
           className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
-            tracking.enabled ? 'bg-[#E8A0C4]' : 'bg-[#2A2A2F]'
+            tracking?.enabled ? 'bg-[#E8A0C4]' : 'bg-[#2A2A2F]'
           }`}
         >
           <div
             className={`w-5 h-5 rounded-full bg-white transition-transform ${
-              tracking.enabled ? 'translate-x-5' : 'translate-x-0'
+              tracking?.enabled ? 'translate-x-5' : 'translate-x-0'
             }`}
           />
         </button>
       </div>
 
       {/* Main Circular Indicator */}
-      {tracking.enabled && (
+      {tracking?.enabled === true && (
         <div className="p-5 rounded-[20px] bg-[#1B1B1F] border border-[#2A2A2F] flex flex-col items-center text-center mb-4">
           <div className="relative w-40 h-40 flex items-center justify-center mb-4">
             <svg className="w-full h-full transform -rotate-90">
@@ -108,16 +104,16 @@ export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
 
             <div className="absolute flex flex-col items-center justify-center">
               <span className="text-[10px] font-bold text-[#8E8E94] tracking-widest uppercase">
-                DÍA {tracking.day}
+                DÍA {tracking.day ?? 'Sin dato'}
               </span>
               <span className="text-xl font-extrabold font-display text-[#E8A0C4]">
-                {tracking.phase}
+                {tracking.phase ?? 'Sin fase registrada'}
               </span>
             </div>
           </div>
 
           <p className="text-xs text-[#8E8E94] leading-relaxed max-w-[260px] mb-5">
-            {tracking.advice}
+            {tracking.advice || 'Sin información registrada.'}
           </p>
 
           <button
@@ -140,12 +136,12 @@ export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
         <button
           onClick={handleToggleShared}
           className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
-            tracking.sharedWithTrainer ? 'bg-[#E8A0C4]' : 'bg-[#2A2A2F]'
+            tracking?.sharedWithTrainer ? 'bg-[#E8A0C4]' : 'bg-[#2A2A2F]'
           }`}
         >
           <div
             className={`w-5 h-5 rounded-full bg-white transition-transform ${
-              tracking.sharedWithTrainer ? 'translate-x-5' : 'translate-x-0'
+              tracking?.sharedWithTrainer ? 'translate-x-5' : 'translate-x-0'
             }`}
           />
         </button>
@@ -162,10 +158,10 @@ export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
           </div>
           <div>
             <h4 className="text-xs font-bold text-[#F5F4F0]">
-              {tracking.phase ? `Fase ${tracking.phase.toLowerCase()}` : 'Sin fase registrada'}
+          {tracking?.phase ? `Fase ${tracking.phase.toLowerCase()}` : 'Sin fase registrada'}
             </h4>
             <p className="text-[10px] text-[#8E8E94]">
-              {tracking.phase
+          {tracking?.phase
                 ? tracking.phase === 'Menstrual' ? 'Considera bajar volumen si lo pide' : 'Energía alta para entrenar fuerza'
                 : 'Sin información registrada'}
             </p>

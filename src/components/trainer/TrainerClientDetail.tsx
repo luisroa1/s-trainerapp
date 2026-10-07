@@ -4,7 +4,6 @@ import {
   MessageSquare, 
   Apple, 
   Dumbbell, 
-  AlertTriangle, 
   Moon, 
   Plus, 
   Send 
@@ -213,98 +212,6 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
       {assignmentMessage && <p role="status" className="mb-4 text-xs text-emerald-300">{assignmentMessage}</p>}
 
       <ClientPathologiesSummary pathologies={client.pathologies} />
-
-      {/* Alert banner if exists */}
-      {client.alert && (
-        <div className="mb-6 p-3.5 rounded-[16px] bg-red-950/20 border border-red-900/40 flex items-center gap-3 text-red-200">
-          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-          <p className="text-xs">
-            {client.alert.message}
-          </p>
-        </div>
-      )}
-
-      {/* 5-Card Dashboard with exact Color-Coding */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
-        {/* PESO (#5CD6FF) */}
-        <div className="p-4 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            PESO
-          </span>
-          <div className="my-2">
-            <span className="text-xl font-extrabold font-display text-[#5CD6FF]">
-              {typeof client.currentWeight === 'number' && Number.isFinite(client.currentWeight)
-                ? `${client.currentWeight.toFixed(1).replace('.', ',')} kg`
-                : 'Sin datos'}
-            </span>
-          </div>
-          <span className="text-[11px] text-[#5CD6FF] font-medium">
-            Sin tendencia registrada
-          </span>
-        </div>
-
-        {/* ADHERENCIA (#CFFF5C) */}
-        <div className="p-4 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            ADHERENCIA
-          </span>
-          <div className="my-2">
-            <span className="text-xl font-extrabold font-display text-[var(--accent-color,#CFFF5C)]">
-              {client.adherencePercentage} %
-            </span>
-          </div>
-          <span className="text-[11px] text-[#8E8E94]">
-            {client.completedWorkoutsCount}/{client.totalScheduledWorkoutsCount} sesiones
-          </span>
-        </div>
-
-        {/* PASOS (#FF6B4A) */}
-        <div className="p-4 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            PASOS
-          </span>
-          <div className="my-2">
-            <span className="text-xl font-extrabold font-display text-[#FF6B4A]">
-              {typeof client.metrics?.stepsToday === 'number'
-                ? client.metrics.stepsToday.toLocaleString()
-                : 'Sin datos'}
-            </span>
-          </div>
-          <span className="text-[11px] text-[#8E8E94]">
-            media diaria
-          </span>
-        </div>
-
-        {/* SUEÑO (#B388FF) */}
-        <div className="p-4 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            SUEÑO
-          </span>
-          <div className="my-2">
-            <span className="text-xl font-extrabold font-display text-[#B388FF]">
-              {client.metrics?.sleepHours || 'Sin datos'}
-            </span>
-          </div>
-          <span className="text-[11px] text-[#8E8E94]">
-            media diaria
-          </span>
-        </div>
-
-        {/* NUTRICIÓN (#CFFF5C) */}
-        <div className="p-4 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-          <span className="text-[9px] font-bold tracking-widest text-[#8E8E94] uppercase">
-            NUTRICIÓN
-          </span>
-          <div className="my-2">
-            <span className="text-xl font-extrabold font-display text-[var(--accent-color,#CFFF5C)]">
-              Sin datos suficientes
-            </span>
-          </div>
-          <span className="text-[11px] text-[#8E8E94]">
-            cumplimiento
-          </span>
-        </div>
-      </div>
 
       {/* Tabs Row */}
       <div className="flex items-center gap-6 border-b border-[#2A2A2F] mb-6 text-xs font-semibold">

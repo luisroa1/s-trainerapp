@@ -87,15 +87,15 @@ export interface ClientData {
   height: string;
   objective: string;
   status: ClientStatus;
-  nextWorkout: string;
-  adherencePercentage: number;
-  completedWorkoutsCount: number;
-  totalScheduledWorkoutsCount: number;
+  nextWorkout?: string;
+  adherencePercentage?: number;
+  completedWorkoutsCount?: number;
+  totalScheduledWorkoutsCount?: number;
   currentWeight?: number;
-  initialWeight: number;
-  targetWeight: number;
-  weightWeeklyTrend: string;
-  lastCheckIn: string;
+  initialWeight?: number;
+  targetWeight?: number;
+  weightWeeklyTrend?: string;
+  lastCheckIn?: string;
   alert?: {
     type: 'warning' | 'info' | 'danger';
     title: string;
@@ -125,24 +125,24 @@ export interface ClientData {
     waterGoal?: number;
   };
   assignedProgramId: string;
-  weeklySchedule: {
+  weeklySchedule?: {
     day: 'L' | 'M' | 'X' | 'J' | 'V' | 'S' | 'D';
     status: 'completed' | 'pending' | 'rest' | 'protected_streak';
     dateLabel?: string;
   }[];
-  strengthProgression: {
+  strengthProgression?: {
     exercise: string;
     previousWeight: number;
     currentWeight: number;
   }[];
-  bodyMeasurements: {
-    cintura: number;
-    cadera: number;
-    pecho: number;
-    brazo: number;
-    lastUpdated: string;
+  bodyMeasurements?: {
+    cintura?: number;
+    cadera?: number;
+    pecho?: number;
+    brazo?: number;
+    lastUpdated?: string;
   };
-  impedanceHistory: {
+  impedanceHistory?: {
     date: string;
     weight: number;
     fatPercentage: number;

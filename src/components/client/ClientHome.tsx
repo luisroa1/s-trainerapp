@@ -2,17 +2,8 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { programFromActiveAssignment } from '../../lib/clientProgramAssignment.mjs';
 import { ProgramDay, WorkoutSessionView } from '../../types';
-import { User, Bell, MessageSquare, Moon, MoonStar, Dumbbell, Salad, Flame, ChevronRight } from 'lucide-react';
+import { User, Bell, MessageSquare, Moon, Dumbbell, ChevronRight } from 'lucide-react';
 import heroTrainingPhoto from '../../assets/hero-training.jpg';
-
-/* Icono de zapatilla (no existe en lucide-react) — silueta de perfil,
-   para el chip de "Pasos", igual estilo trazo que el resto de íconos. */
-const ShoeIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}>
-    <path d="M2.5 15.2c0-.9.6-1.6 1.4-1.9l3.1-1c.6-.2 1.1-.6 1.4-1.1l1.6-2.7c.3-.5.9-.8 1.5-.8.9 0 1.6.7 1.6 1.6v1.1c0 .5.2.9.6 1.2l3.4 2.7c.5.4 1.1.6 1.7.6h2.2c.7 0 1.3.6 1.3 1.3v1.2c0 .8-.6 1.4-1.4 1.5-3.3.3-10.2.9-14.6.9-1.6 0-2.8-1.1-2.8-2.6Z" />
-    <path d="M3 16.4c1 .4 2.1.6 3.3.6h15.2" />
-  </svg>
-);
 
 interface ClientHomeProps {
   onStartWorkout: (programDayId: string) => void;
@@ -176,56 +167,6 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
               <p className="text-xs text-[#8E8E94] leading-relaxed"><span className="font-semibold text-[#F5F4F0]">Tu entrenador:</span> {trainerMessage}</p>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Metric chips — icono con glow + número + etiqueta, misma fila (mismos 5 datos reales que antes) */}
-      <div className="flex items-stretch justify-between gap-1.5">
-        {/* Pasos (#FF6B4A) */}
-        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
-          <ShoeIcon className="w-5 h-5 shrink-0" style={{ color: '#5CD6FF', filter: 'drop-shadow(0 0 5px rgba(92,214,255,0.75))' }} />
-          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {typeof activeClient.metrics?.stepsToday === 'number' ? activeClient.metrics.stepsToday.toLocaleString() : 'Sin datos'}
-          </span>
-          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
-            Pasos
-          </span>
-        </div>
-
-        {/* Kcal (mismo dato real de kcal de hoy) */}
-        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
-          <Flame className="w-5 h-5 shrink-0" style={{ color: '#FF6B4A', filter: 'drop-shadow(0 0 5px rgba(255,107,74,0.75))' }} />
-          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {typeof activeClient.metrics?.kcalToday === 'number' ? activeClient.metrics.kcalToday.toLocaleString() : 'Sin datos'}
-          </span>
-          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
-            Kcal
-          </span>
-        </div>
-
-        {/* Nutrición (mismo dato real de kcal de hoy — enlaza a la pestaña Nutrición) */}
-        <div
-          onClick={() => onNavigateTab('nutricion')}
-          className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] cursor-pointer hover:border-[#3A3A40] transition-colors"
-        >
-          <Salad className="w-5 h-5 shrink-0" style={{ color: '#5CFFC4', filter: 'drop-shadow(0 0 5px rgba(92,255,196,0.75))' }} />
-          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {typeof activeClient.metrics?.kcalToday === 'number' ? activeClient.metrics.kcalToday.toLocaleString() : 'Sin datos'}
-          </span>
-          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
-            Nutrición
-          </span>
-        </div>
-
-        {/* Sueño (#B388FF) */}
-        <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
-          <MoonStar className="w-5 h-5 shrink-0" style={{ color: '#B388FF', filter: 'drop-shadow(0 0 5px rgba(179,136,255,0.75))' }} />
-          <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {activeClient.metrics?.sleepHours || 'Sin datos'}
-          </span>
-          <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
-            Sueño
-          </span>
         </div>
       </div>
 

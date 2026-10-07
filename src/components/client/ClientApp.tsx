@@ -223,10 +223,7 @@ export const ClientApp: React.FC = () => {
         )}
 
         {currentScreen === 'progreso' && (
-          <ClientProgress
-            onOpenMeasurements={() => setCurrentScreen('medidas')}
-            onOpenPhotos={() => setCurrentScreen('fotos')}
-          />
+          <ClientProgress onOpenMeasurements={() => setCurrentScreen('medidas')} />
         )}
 
         {(currentScreen === 'medidas' || currentScreen === 'fotos') && (

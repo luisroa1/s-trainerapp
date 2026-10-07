@@ -100,7 +100,7 @@ export const TrainerGuide: React.FC<TrainerGuideProps> = ({ onNavigate }) => {
             </h3>
           </div>
           <p className="text-xs text-[#8E8E94] leading-relaxed pl-9">
-            En Clientes ves adherencia y alertas de un vistazo. Toca un cliente para su programado vs. realizado.
+            En Clientes puedes abrir una ficha y revisar las sesiones registradas frente a su prescripción histórica.
           </p>
         </div>
       </div>

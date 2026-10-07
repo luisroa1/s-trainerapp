@@ -120,14 +120,14 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
           <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
         </div>
 
-        {/* Fotos e impedanciometría */}
+        {/* Registros corporales */}
         <div
           onClick={() => onNavigateSubscreen('fotos')}
           className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Camera className="w-4 h-4 text-[#8E8E94]" />
-            <span className="text-xs font-semibold text-[#F5F4F0]">Fotos e impedanciometría</span>
+            <Ruler className="w-4 h-4 text-[#8E8E94]" />
+            <span className="text-xs font-semibold text-[#F5F4F0]">Registros corporales</span>
           </div>
           <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
         </div>

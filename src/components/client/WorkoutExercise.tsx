@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Check, Clock, Dumbbell, X } from 'lucide-react';
 import { supabaseDb } from '../../lib/supabase';
 import { WorkoutSessionView, WorkoutSetResult } from '../../types';
+import { deriveDayExecutionMetrics } from '../../lib/trainerWorkoutMetrics.mjs';
 
 type MeasureKind = 'reps' | 'duration';
 type LoadKind = NonNullable<WorkoutSetResult['load_kind']> | '';
@@ -27,6 +28,10 @@ const loadLabel = (result: WorkoutSetResult) => {
 
 export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({ session, onBack, onClose, onSessionChange }) => {
   const exercises = useMemo(() => [...session.day.exercises].sort((a, b) => a.order - b.order), [session.day.exercises]);
+  const executionMetrics = useMemo(
+    () => deriveDayExecutionMetrics(session.day, session.results, session.session.completed_at),
+    [session.day, session.results, session.session.completed_at],
+  );
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [editingResult, setEditingResult] = useState<WorkoutSetResult | null>(null);
   const [measureKind, setMeasureKind] = useState<MeasureKind>('reps');
@@ -40,19 +45,19 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({ session, onBac
   const [saving, setSaving] = useState(false);
   const [finishing, setFinishing] = useState(false);
 
-  const incompleteExercise = exercises.find(exercise => {
-    const count = session.results.filter(result => result.exercise_id === exercise.id).length;
-    return count < exercise.sets;
-  });
+  const incompleteExercise = exercises.find(exercise =>
+    (executionMetrics.exercises.find(metric => metric.exercise_id === exercise.id)?.missingRecordCount ?? 0) > 0
+  );
   const currentExercise = exercises.find(exercise => exercise.id === selectedExerciseId) || incompleteExercise || exercises.at(-1);
   const exerciseResults = currentExercise
     ? session.results.filter(result => result.exercise_id === currentExercise.id).sort((a, b) => a.set_number - b.set_number)
     : [];
-  const nextSetNumber = exerciseResults.reduce((max, result) => Math.max(max, result.set_number), 0) + 1;
+  const recordedSetNumbers = new Set(exerciseResults.map(result => result.set_number));
+  const nextSetNumber = Array.from({ length: currentExercise?.sets || 0 }, (_, index) => index + 1)
+    .find(setNumber => !recordedSetNumbers.has(setNumber))
+    ?? (exerciseResults.reduce((max, result) => Math.max(max, result.set_number), 0) + 1);
   const canSaveCurrentSet = Boolean(currentExercise && (editingResult || nextSetNumber <= currentExercise.sets));
-  const allPlannedSetsRecorded = exercises.length > 0 && exercises.every(exercise =>
-    session.results.filter(result => result.exercise_id === exercise.id).length >= exercise.sets
-  );
+  const allPlannedSetsRecorded = executionMetrics.plannedSetCount > 0 && executionMetrics.missingRecordCount === 0;
   const finalized = session.session.completed_at !== null;
   const hasUnsubmittedInput = Boolean(
     editingResult || repsValue.trim() || durationValue.trim() || loadValue.trim() || rirValue.trim() || note.trim()
@@ -180,6 +185,10 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({ session, onBac
         <span className="text-center text-[11px] font-bold uppercase tracking-widest text-[#8E8E94]">{session.day.title}</span>
         <button type="button" onClick={() => leaveWorkout(onClose)} aria-label="Salir" className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1B1B1F] text-[#8E8E94]"><X className="h-4 w-4" /></button>
       </div>
+      <p className="mb-4 text-center text-xs text-[#A0A0A8]">
+        Sesión · Series registradas: {executionMetrics.recordedPlannedSetCount}/{executionMetrics.plannedSetCount}
+        {executionMetrics.extraSetCount > 0 && ` · +${executionMetrics.extraSetCount} extra`}
+      </p>
 
       {currentExercise && (
         <>
@@ -187,7 +196,6 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({ session, onBac
           <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-[#8E8E94]">Ejercicio {exerciseIndex + 1} de {exercises.length}</p>
           <h1 className="text-2xl font-extrabold">{currentExercise.name}</h1>
           <p className="mt-1 text-xs text-[#8E8E94]">{currentExercise.muscleGroup}</p>
-
           <section className="my-4 rounded-2xl border border-[#2A2A2F] bg-[#1B1B1F] p-3">
             <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-[#8E8E94]"><Dumbbell className="h-3.5 w-3.5" /> Prescripción</div>
             <p className="text-sm font-semibold">{currentExercise.sets} × {currentExercise.reps} · {currentExercise.weight || 'Carga no especificada'} · RIR objetivo {currentExercise.rir}</p>
@@ -241,7 +249,7 @@ export const WorkoutExercise: React.FC<WorkoutExerciseProps> = ({ session, onBac
             </section>
           )}
 
-          {allPlannedSetsRecorded && <p className="mb-3 text-sm text-emerald-300">Todas las series prescritas tienen un resultado guardado.</p>}
+          {allPlannedSetsRecorded && <p className="mb-3 text-sm text-emerald-300">Todas las series pautadas tienen un resultado guardado.</p>}
           {error && !currentExercise && <p role="alert" className="mb-3 text-sm text-red-300">{error}</p>}
           <button type="button" onClick={() => leaveWorkout(() => void handleFinish())} disabled={finishing || saving} className="mt-auto w-full rounded-full border border-[#3A3A40] bg-[#1B1B1F] py-4 font-bold disabled:opacity-50">{finishing ? 'Finalizando…' : 'Finalizar sesión'}</button>
         </>

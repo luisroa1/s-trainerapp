@@ -1,3 +1,7 @@
+import { deriveDayExecutionMetrics, deriveRecentExerciseExposures } from './trainerWorkoutMetrics.mjs';
+
+export { deriveDayExecutionMetrics, deriveRecentExerciseExposures, compareExerciseExposureSets } from './trainerWorkoutMetrics.mjs';
+
 function oneRelation(value, label) {
   if (Array.isArray(value)) {
     if (value.length !== 1) throw new Error(`La relación ${label} no es inequívoca.`);
@@ -114,28 +118,30 @@ export function buildTrainerWorkoutHistory(sessionRows, resultRows, clientId) {
   if (resultRows.some(result => !knownSessionIds.has(result.workout_session_id))) {
     throw new Error('Se recibió un resultado sin una sesión del cliente consultado.');
   }
-  return model.sort((a, b) => Date.parse(b.session.started_at) - Date.parse(a.session.started_at));
+  const sorted = model.sort((a, b) => Date.parse(b.session.started_at) - Date.parse(a.session.started_at));
+  return sorted.map(entry => {
+    const execution = deriveDayExecutionMetrics(entry.day, entry.results, entry.session.completed_at);
+    const day = {
+      ...entry.day,
+      exercises: entry.day.exercises.map(exercise => ({
+        ...exercise,
+        recentExposures: deriveRecentExerciseExposures(sorted, entry, exercise.id),
+      })),
+    };
+    return { ...entry, day, execution };
+  });
 }
 
 /** Creates display rows without deriving performed values from prescribed targets. */
+/** @param {any} sessionEntry @param {string} exerciseId @returns {{set_number:number,state:'recorded'|'missing'|'extra',planned:{reps:number|null,load:string|null,rir:number|null}|null,performed:(Record<string,any>|null)}[]} */
 export function plannedPerformedRows(sessionEntry, exerciseId) {
-  const exercise = sessionEntry?.day?.exercises?.find(item => item.id === exerciseId);
-  if (!exercise) throw new Error('El ejercicio no pertenece a la sesión histórica.');
-  const results = sessionEntry.results.filter(item => item.exercise_id === exerciseId);
-  const bySet = new Map(results.map(item => [item.set_number, item]));
-  const maxSet = Math.max(exercise.target_sets, ...results.map(item => item.set_number), 0);
-  return Array.from({ length: maxSet }, (_, index) => {
-    const setNumber = index + 1;
-    return {
-      set_number: setNumber,
-      planned: setNumber <= exercise.target_sets ? {
-        reps: exercise.target_reps ?? null,
-        load: exercise.target_load ?? null,
-        rir: exercise.target_rir ?? null,
-      } : null,
-      performed: bySet.get(setNumber) || null,
-    };
-  });
+  const exerciseMetrics = deriveDayExecutionMetrics(
+    sessionEntry?.day,
+    sessionEntry?.results,
+    sessionEntry?.session?.completed_at,
+  ).exercises.find(item => item.exercise_id === exerciseId);
+  if (!exerciseMetrics) throw new Error('El ejercicio no pertenece a la sesión histórica.');
+  return exerciseMetrics.slots;
 }
 
 export function formatPerformedMeasure(result) {

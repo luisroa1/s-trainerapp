@@ -235,6 +235,14 @@ export interface TrainerWorkoutSnapshotExercise {
   rest_seconds?: number | null;
   instructions?: string | null;
   video_url?: string | null;
+  recentExposures?: {
+    sessionId: string;
+    startedAt: string;
+    versionNumber: number;
+    exerciseName: string;
+    recordedSetCount: number;
+    results: TrainerWorkoutSetResult[];
+  }[];
 }
 
 export interface TrainerWorkoutSetResult extends WorkoutSetResult {}
@@ -261,4 +269,24 @@ export interface TrainerWorkoutHistoryEntry {
     exercises: TrainerWorkoutSnapshotExercise[];
   };
   results: TrainerWorkoutSetResult[];
+  execution: {
+    sessionStatus: 'in_progress' | 'finished';
+    plannedSetCount: number;
+    recordedPlannedSetCount: number;
+    extraSetCount: number;
+    missingRecordCount: number;
+    exercises: {
+      exercise_id: string;
+      plannedSetCount: number;
+      recordedPlannedSetCount: number;
+      extraSetCount: number;
+      missingRecordCount: number;
+      slots: {
+        set_number: number;
+        state: 'recorded' | 'missing' | 'extra';
+        planned: { reps: number | null; load: string | null; rir: number | null } | null;
+        performed: TrainerWorkoutSetResult | null;
+      }[];
+    }[];
+  };
 }

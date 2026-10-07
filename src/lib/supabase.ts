@@ -188,42 +188,38 @@ export const supabaseDb = {
     }
   },
 
-  async getTrainerWorkoutHistory(clientId: string): Promise<{ data: TrainerWorkoutHistoryEntry[] | null; error: any }> {
+  async getTrainerWorkoutHistory(
+    clientId: string,
+    { limit = 20, offset = 0 }: { limit?: number; offset?: number } = {},
+  ): Promise<{ data: TrainerWorkoutHistoryEntry[] | null; error: any }> {
     try {
-      const sessionRows: any[] = [];
-      const pageSize = 100;
-      for (let offset = 0; ; offset += pageSize) {
-        const { data, error } = await supabase
-          .from('workout_sessions')
-          .select('id,client_program_assignment_id,program_day_id,started_at,completed_at,assignment:client_program_assignments!inner(id,client_id,program_version_id,assigned_at,ended_at,program_version:program_versions!inner(id,program_id,version_number,snapshot))')
-          .eq('assignment.client_id', clientId)
-          .order('started_at', { ascending: false })
-          .order('id', { ascending: true })
-          .range(offset, offset + pageSize - 1);
-        if (error) return { data: null, error };
-        sessionRows.push(...(data || []));
-        if (!data || data.length < pageSize) break;
-      }
+      const safeLimit = Number.isInteger(limit) ? Math.max(1, Math.min(limit, 100)) : 20;
+      const safeOffset = Number.isInteger(offset) ? Math.max(0, offset) : 0;
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from('workout_sessions')
+        .select('id,client_program_assignment_id,program_day_id,started_at,completed_at,assignment:client_program_assignments!inner(id,client_id,program_version_id,assigned_at,ended_at,program_version:program_versions!inner(id,program_id,version_number,snapshot))')
+        .eq('assignment.client_id', clientId)
+        .order('started_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(safeOffset, safeOffset + safeLimit - 1);
+      if (sessionError) return { data: null, error: sessionError };
 
-      if (sessionRows.length === 0) return { data: [], error: null };
+      if (!sessionRows?.length) return { data: [], error: null };
 
       const sessionIds = sessionRows.map(row => row.id);
       const resultRows: WorkoutSetResult[] = [];
-      for (let offset = 0; offset < sessionIds.length; offset += pageSize) {
-        const ids = sessionIds.slice(offset, offset + pageSize);
-        const resultPageSize = 1000;
-        for (let resultOffset = 0; ; resultOffset += resultPageSize) {
-          const { data, error } = await supabase
-            .from('workout_set_results')
-            .select('id,workout_session_id,exercise_id,set_number,reps_performed,duration_seconds,load_kind,load_kg,rir_performed,note,created_at,updated_at')
-            .in('workout_session_id', ids)
-            .order('exercise_id', { ascending: true })
-            .order('set_number', { ascending: true })
-            .range(resultOffset, resultOffset + resultPageSize - 1);
-          if (error) return { data: null, error };
-          resultRows.push(...((data || []) as WorkoutSetResult[]));
-          if (!data || data.length < resultPageSize) break;
-        }
+      const resultPageSize = 1000;
+      for (let resultOffset = 0; ; resultOffset += resultPageSize) {
+        const { data, error } = await supabase
+          .from('workout_set_results')
+          .select('id,workout_session_id,exercise_id,set_number,reps_performed,duration_seconds,load_kind,load_kg,rir_performed,note,created_at,updated_at')
+          .in('workout_session_id', sessionIds)
+          .order('exercise_id', { ascending: true })
+          .order('set_number', { ascending: true })
+          .range(resultOffset, resultOffset + resultPageSize - 1);
+        if (error) return { data: null, error };
+        resultRows.push(...((data || []) as WorkoutSetResult[]));
+        if (!data || data.length < resultPageSize) break;
       }
 
       const model = buildTrainerWorkoutHistory(sessionRows, resultRows, clientId);

@@ -336,7 +336,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
           <div className="col-span-2 space-y-6">
             <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F]">
               <div className="mb-4 flex items-center justify-between">
-                <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">Sesiones registradas</span>
+                <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">Últimas 20 sesiones registradas</span>
                 {workoutHistoryStatus === 'loaded' && <span className="text-xs text-[#8E8E94]">{workoutHistory.length}</span>}
               </div>
               {workoutHistoryStatus === 'loading' && <p role="status" className="text-sm text-[#8E8E94]">Consultando ejecuciones registradas…</p>}
@@ -345,7 +345,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
                   <p>{workoutHistoryError}</p>
                   <button type="button" onClick={() => {
                     setWorkoutHistoryStatus('loading');
-                    void supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
+                    void supabaseDb.getTrainerWorkoutHistory(client.id, { limit: 20, offset: 0 }).then(({ data, error }) => {
                       if (error || !data) {
                         setWorkoutHistoryStatus('error');
                         setWorkoutHistoryError('No se pudo consultar el historial de entrenamientos.');
@@ -371,10 +371,14 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
                           {new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.session.started_at))}
                         </p>
                       </div>
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.session.completed_at ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-300'}`}>
-                        {entry.session.completed_at ? 'Finalizada' : 'En curso'}
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.execution.sessionStatus === 'finished' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-300'}`}>
+                        {entry.execution.sessionStatus === 'finished' ? 'Finalizada' : 'En curso'}
                       </span>
                     </div>
+                    <p className="mt-2 text-xs text-[#A0A0A8]">
+                      Series registradas: {entry.execution.recordedPlannedSetCount}/{entry.execution.plannedSetCount}
+                      {entry.execution.extraSetCount > 0 && ` · +${entry.execution.extraSetCount} extra`}
+                    </p>
                   </summary>
                   <div className="mt-4 space-y-4">
                     {entry.day.exercises.map((exercise: TrainerWorkoutSnapshotExercise) => (
@@ -382,6 +386,13 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
                         <div className="mb-3">
                           <h4 className="text-sm font-bold text-[#F5F4F0]">{exercise.order}. {exercise.name}</h4>
                           {exercise.instructions && <p className="mt-1 text-xs leading-relaxed text-[#A0A0A8]">{exercise.instructions}</p>}
+                          {(() => {
+                            const counts = entry.execution.exercises.find(item => item.exercise_id === exercise.id);
+                            return counts ? <p className="mt-1 text-[11px] text-[#8E8E94]">
+                              Series registradas: {counts.recordedPlannedSetCount}/{counts.plannedSetCount}
+                              {counts.extraSetCount > 0 && ` · +${counts.extraSetCount} extra`}
+                            </p> : null;
+                          })()}
                         </div>
                         <div className="grid grid-cols-[minmax(64px,0.55fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
                           <span className="text-[10px] font-bold uppercase tracking-wide text-[#77777F]">Serie</span>
@@ -411,6 +422,21 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
                             );
                           })}
                         </div>
+                        {(exercise.recentExposures?.length || 0) >= 2 && (
+                          <div className="mt-3 border-t border-[#2A2A2F] pt-3">
+                            <h5 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#8E8E94]">Últimas exposiciones</h5>
+                            <div className="space-y-2">
+                              {exercise.recentExposures?.map(exposure => (
+                                <div key={exposure.sessionId} className="text-[11px] text-[#A0A0A8]">
+                                  <p>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(new Date(exposure.startedAt))} · versión {exposure.versionNumber} · {exposure.recordedSetCount} series registradas</p>
+                                  <p className="mt-0.5">{exposure.results.map(result =>
+                                    `S${result.set_number}: ${formatPerformedMeasure(result)} · ${formatPerformedLoad(result)} · RIR ${result.rir_performed ?? 'Sin dato'}`
+                                  ).join(' | ')}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

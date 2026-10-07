@@ -4,6 +4,7 @@ import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, AccentColo
 import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
 import { resolveProfileRole } from '../lib/profileRole.mjs';
 import { resolveAccountAccess } from '../lib/accountAccessState.mjs';
+import { resolveInitialSession } from '../lib/initialSessionResolution.mjs';
 
 const INITIAL_TRAINER: TrainerProfile = {
   id: '',
@@ -51,6 +52,7 @@ interface AppContextType {
   userRole: UserRole | null;
   isAdmin: boolean;
   authLoading: boolean;
+  authInitializationError: string | null;
   accountAccessStatus: 'idle' | 'loading' | 'enabled' | 'pending' | 'suspended' | 'error';
   accountAccessError: string | null;
   retryAccountAccessResolution: () => Promise<void>;
@@ -162,6 +164,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const profileRoleRequest = useRef(0);
   const accountAccessRequest = useRef(0);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [authInitializationError, setAuthInitializationError] = useState<string | null>(null);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>('connecting');
   const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false);
 
@@ -491,9 +494,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // 2. Get initial session after processing a callback, if present.
-    establishCallbackSession().then(async ({ data: { session }, error }) => {
-      if (!isMounted) return;
-      if (session?.user) {
+    void resolveInitialSession(establishCallbackSession, {
+      onSession: async session => {
+        if (!isMounted) return;
+        setAuthInitializationError(null);
         setSupabaseSession(session);
         setSupabaseUser(session.user);
         try {
@@ -503,8 +507,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : { profile: null, role: null };
 
           if (isMounted && role && profile) {
-
-            if ((role === 'trainer' || role === 'admin') && profile) {
+            if (role === 'trainer' || role === 'admin') {
               const isRoleAdmin = role === 'admin';
               const roleDisplay = isRoleAdmin ? 'Administrador' : 'Entrenador';
               const fullName = profile.full_name || session.user.user_metadata?.full_name || profile.email?.split('@')[0] || roleDisplay;
@@ -526,21 +529,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (e) {
           console.warn('Error fetching initial profile:', e);
         }
-      } else {
+      },
+      onNoSession: () => {
+        if (!isMounted) return;
+        setAuthInitializationError(null);
         profileRoleRequest.current += 1;
         accountAccessRequest.current += 1;
+        setSupabaseSession(null);
+        setSupabaseUser(null);
         setUserRole(null);
         setAccountAccessStatus('idle');
         setAccountAccessError(null);
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
+      },
+      onError: error => {
+        if (!isMounted) return;
+        console.error('Unable to establish the initial auth session:', error);
+        setAuthInitializationError('No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.');
+        setSupabaseSession(null);
+        setSupabaseUser(null);
+        setUserRole(null);
+        setAccountAccessStatus('idle');
+        setAccountAccessError(null);
+        setProfileRoleStatus('idle');
+        setProfileRoleError(null);
+      },
+      onSettled: () => {
+        if (isMounted) setAuthLoading(false);
       }
-      if (isMounted) setAuthLoading(false);
     });
 
     // 3. Auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return;
+      if (session?.user) setAuthInitializationError(null);
       setSupabaseSession(session);
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
@@ -952,6 +975,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userRole,
         isAdmin,
         authLoading,
+        authInitializationError,
         accountAccessStatus,
         accountAccessError,
         retryAccountAccessResolution,

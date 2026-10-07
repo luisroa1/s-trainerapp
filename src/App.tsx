@@ -12,7 +12,7 @@ import { resolveAppView } from './lib/profileRole.mjs';
 
 const AuthenticatedApp: React.FC = () => {
   const {
-    supabaseUser, userRole, authLoading, accountAccessStatus, accountAccessError,
+    supabaseUser, userRole, authLoading, authInitializationError, accountAccessStatus, accountAccessError,
     retryAccountAccessResolution, profileRoleStatus, profileRoleError,
     retryProfileRoleResolution, signOut,
   } = useApp();
@@ -24,6 +24,21 @@ const AuthenticatedApp: React.FC = () => {
           <Loader2 className="w-4 h-4 animate-spin" /> Cargando S-TRAINER...
         </div>
       </div>
+    );
+  }
+
+  if (authInitializationError && !supabaseUser) {
+    return (
+      <main className="min-h-screen bg-[#101012] text-[#F5F4F0] flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <p role="alert" className="max-w-md text-sm text-[#D1D1D6]">{authInitializationError}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-xl bg-[#CFFF5C] px-4 py-2 font-semibold text-[#101012]"
+        >
+          Recargar
+        </button>
+      </main>
     );
   }
 

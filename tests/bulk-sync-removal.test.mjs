@@ -25,11 +25,14 @@ test('manual refresh only reads Supabase and ordinary writes remain individual',
 
   assert.match(refresh, /supabaseDb\.getClients\(\)/);
   assert.match(refresh, /supabaseDb\.getPrograms\(programOwnerId\)/);
-  assert.match(refresh, /supabaseDb\.getNutritionPlans\(\)/);
+  assert.match(refresh, /supabaseDb\.getNutritionPlanDrafts\(\)/);
+  assert.match(refresh, /supabaseDb\.getActiveNutritionPlan\(\)/);
   assert.match(refresh, /supabaseDb\.getTrainerProfile\(/);
   assert.doesNotMatch(refresh, /\.upsert\s*\(|bulkUpsert|\.insert\s*\(|\.update\s*\(/);
 
-  for (const method of ['upsertClient', 'upsertProgram', 'upsertNutritionPlan', 'upsertTrainerProfile']) {
+  for (const method of ['upsertClient', 'upsertProgram', 'upsertTrainerProfile']) {
     assert.match(supabaseClient, new RegExp(`async ${method}\\s*\\(`));
   }
+  assert.match(supabaseClient, /async saveNutritionPlanDraft\s*\(/);
+  assert.match(supabaseClient, /async applyNutritionPlan\s*\(/);
 });

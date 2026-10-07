@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Edit2, Plus, Sparkles, Check, ShoppingCart, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { NutritionPlan } from '../../types';
+import { NutritionMealSnapshot, NutritionPlanSnapshot } from '../../types';
 
 interface TrainerNutritionBuilderProps {
   clientId: string;
@@ -9,426 +9,167 @@ interface TrainerNutritionBuilderProps {
   onSave: () => void;
 }
 
-export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = ({
-  clientId,
-  onBack,
-  onSave
-}) => {
-  const { clients, nutritionPlans, updateNutritionPlan } = useApp();
-  const client = clients.find(c => c.id === clientId);
-  const initialPlan = nutritionPlans[clientId] || {
-    id: `nut-${clientId}`,
-    clientId,
-    clientName: client?.name || 'Cliente',
-    objective: client?.objective || 'Pérdida de grasa',
-    dietType: 'Omnívora',
-    targetKcal: 2000,
-    macros: { protein: 140, carbs: 200, fat: 65, fiber: 25, water: 2.5 },
-    meals: [],
-    shoppingList: []
-  };
+const newId = () => globalThis.crypto.randomUUID();
+const emptySnapshot = (): NutritionPlanSnapshot => ({
+  schema_version: 1,
+  plan_name: '',
+  objective: null,
+  target_kcal: null,
+  targets: { protein_g: null, carbohydrate_g: null, fat_g: null, fiber_g: null, water_l: null },
+  meals: [],
+  notes: null,
+});
 
-  const [plan, setPlan] = useState<NutritionPlan>(initialPlan);
-  const [editingMealIndex, setEditingMealIndex] = useState<number | null>(null);
-  const [editingIngredientsText, setEditingIngredientsText] = useState('');
-  const [showAddMealModal, setShowAddMealModal] = useState(false);
-  const [newMealName, setNewMealName] = useState('');
-  const [newMealIngredients, setNewMealIngredients] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
+const numberOrNull = (value: string) => value.trim() === '' ? null : Number(value);
+const numberInput = (value: number | null) => value === null ? '' : String(value);
+
+export const TrainerNutritionBuilder: React.FC<TrainerNutritionBuilderProps> = ({ clientId, onBack, onSave }) => {
+  const { clients, nutritionPlans, nutritionPlanStatus, saveNutritionPlanDraft, applyNutritionPlan } = useApp();
+  const client = clients.find(candidate => candidate.id === clientId);
+  const savedDraft = nutritionPlans[clientId];
+  const [planId, setPlanId] = useState<string | null>(savedDraft?.id || null);
+  const [snapshot, setSnapshot] = useState<NutritionPlanSnapshot>(() => savedDraft?.snapshot || emptySnapshot());
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const requestKey = useRef<string | null>(null);
 
-  // Helper to re-derive shopping list items from meals
-  const deriveShoppingList = (meals: typeof plan.meals) => {
-    const allIngredients = Array.from(
-      new Set(meals.flatMap(m => m.ingredients))
-    );
+  useEffect(() => {
+    if (savedDraft) {
+      setPlanId(savedDraft.id);
+      setSnapshot(savedDraft.snapshot);
+    }
+  }, [savedDraft?.id]);
 
-    const proteinMatches = ['pollo', 'pavo', 'huevo', 'huevos', 'atún', 'salmón', 'ternera', 'tofu', 'proteína', 'queso fresco'];
-    const veggieFruitMatches = ['aguacate', 'espinacas', 'tomate', 'plátano', 'manzana', 'frutos', 'verdura', 'brócoli', 'lechuga'];
-    const cerealMatches = ['arroz', 'avena', 'garbanzos', 'lentejas', 'pan', 'pasta', 'quinoa'];
-    const fatMatches = ['aceite', 'almendras', 'nueces', 'cacahuete'];
-    const dairyMatches = ['yogur', 'leche', 'kéfir', 'queso'];
-
-    const categorized: typeof plan.shoppingList = [
-      { category: 'PROTEÍNAS', items: [] },
-      { category: 'VERDURA Y FRUTA', items: [] },
-      { category: 'CEREALES Y LEGUMBRES', items: [] },
-      { category: 'GRASAS SALUDABLES', items: [] },
-      { category: 'LÁCTEOS', items: [] }
-    ];
-
-    allIngredients.forEach(item => {
-      const lower = item.toLowerCase();
-      if (proteinMatches.some(p => lower.includes(p))) {
-        categorized[0].items.push({ name: item, checked: false });
-      } else if (veggieFruitMatches.some(v => lower.includes(v))) {
-        categorized[1].items.push({ name: item, checked: false });
-      } else if (cerealMatches.some(c => lower.includes(c))) {
-        categorized[2].items.push({ name: item, checked: false });
-      } else if (fatMatches.some(f => lower.includes(f))) {
-        categorized[3].items.push({ name: item, checked: false });
-      } else if (dairyMatches.some(d => lower.includes(d))) {
-        categorized[4].items.push({ name: item, checked: false });
-      } else {
-        categorized[0].items.push({ name: item, checked: false });
-      }
-    });
-
-    return categorized.filter(c => c.items.length > 0);
+  const updateSnapshot = (update: (previous: NutritionPlanSnapshot) => NutritionPlanSnapshot) => {
+    requestKey.current = null;
+    setSnapshot(update);
   };
 
-  const handleSaveMealEdit = (idx: number) => {
-    const newIngredients = editingIngredientsText
-      .split(/[·,]+/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const updatedMeals = plan.meals.map((m, i) =>
-      i === idx ? { ...m, ingredients: newIngredients } : m
-    );
-
-    const updatedShopping = deriveShoppingList(updatedMeals);
-
-    setPlan(prev => ({
-      ...prev,
-      meals: updatedMeals,
-      shoppingList: updatedShopping
-    }));
-
-    setEditingMealIndex(null);
+  const updateTarget = (key: 'protein_g' | 'carbohydrate_g' | 'fat_g' | 'fiber_g' | 'water_l', value: string) => {
+    updateSnapshot(previous => ({ ...previous, targets: { ...previous.targets, [key]: numberOrNull(value) } }));
   };
 
-  const handleAddMeal = () => {
-    if (!newMealName.trim()) return;
-    const ingredients = newMealIngredients
-      .split(/[·,]+/)
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const newMeal = {
-      id: `m-${Date.now()}`,
-      name: newMealName.trim(),
-      completed: false,
-      ingredients,
-      kcalApprox: 400
+  const addMeal = () => {
+    const meal: NutritionMealSnapshot = {
+      id: newId(), name: '', order: snapshot.meals.length + 1,
+      description: null, notes: null, items: [],
     };
-
-    const updatedMeals = [...plan.meals, newMeal];
-    const updatedShopping = deriveShoppingList(updatedMeals);
-
-    setPlan(prev => ({
-      ...prev,
-      meals: updatedMeals,
-      shoppingList: updatedShopping
-    }));
-
-    setNewMealName('');
-    setNewMealIngredients('');
-    setShowAddMealModal(false);
+    updateSnapshot(previous => ({ ...previous, meals: [...previous.meals, meal] }));
   };
 
-  const handleDeleteMeal = (idx: number) => {
-    const updatedMeals = plan.meals.filter((_, i) => i !== idx);
-    const updatedShopping = deriveShoppingList(updatedMeals);
-    setPlan(prev => ({
-      ...prev,
-      meals: updatedMeals,
-      shoppingList: updatedShopping
-    }));
-  };
+  const addItem = (mealId: string) => updateSnapshot(previous => ({
+    ...previous,
+    meals: previous.meals.map(meal => meal.id !== mealId ? meal : {
+      ...meal,
+      items: [...meal.items, {
+        id: newId(), label: '', description: null, quantity: null, unit: null,
+        nutrients: null, notes: null, alternatives: [],
+      }],
+    }),
+  }));
 
-  const handleSavePlan = async (andAssign: boolean) => {
+  const valid = useMemo(() => {
+    if (!snapshot.plan_name.trim()) return false;
+    const numbers = [snapshot.target_kcal, ...Object.values(snapshot.targets)];
+    if (numbers.some(value => value !== null && (!Number.isFinite(value) || value < 0))) return false;
+    return snapshot.meals.every(meal => meal.name.trim().length > 0 && meal.items.every(item =>
+      item.label.trim().length > 0 && (item.quantity === null || (Number.isFinite(item.quantity) && item.quantity >= 0))
+      && (!item.nutrients || Object.values(item.nutrients).every(value => value === null || (Number.isFinite(value) && value >= 0)))
+    ));
+  }, [snapshot]);
+
+  const handleSave = async (assign: boolean) => {
     if (!client) {
-      setSaveError('No se encontró el cliente seleccionado. No se guardó el plan.');
+      setSaveError('No se encontró el cliente seleccionado.');
       return;
     }
-
+    if (!valid) {
+      setSaveError('Completa el nombre del plan, de cada comida y de cada alimento; los valores numéricos deben ser válidos.');
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
-    setToast(null);
+    setNotice(null);
     try {
-      await updateNutritionPlan(client.id, { ...plan, clientId: client.id });
-      setToast(andAssign ? `¡Plan asignado y visible para ${client.name}!` : 'Borrador guardado');
-      setTimeout(() => {
-        setToast(null);
-        onSave();
-      }, 1200);
+      const savedId = await saveNutritionPlanDraft(client.id, planId, snapshot);
+      setPlanId(savedId);
+      if (assign) {
+        requestKey.current ||= newId();
+        await applyNutritionPlan(savedId, requestKey.current);
+        requestKey.current = null;
+        setNotice('Prescripción guardada y asignada.');
+      } else {
+        setNotice('Borrador guardado.');
+      }
+      onSave();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'No se pudo guardar el plan nutricional.');
+      setSaveError(error instanceof Error ? error.message : 'No se pudo confirmar la operación.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!client) {
-    return (
-      <div role="alert" className="p-8 text-sm text-red-300">
-        No se encontró el cliente seleccionado. No se puede guardar el plan.
-      </div>
-    );
-  }
+  if (!client) return <div role="alert" className="p-8 text-sm text-red-300">No se encontró el cliente seleccionado.</div>;
+
+  const inputClass = 'w-full rounded-lg border border-[#2A2A2F] bg-[#101012] px-3 py-2 text-sm text-[#F5F4F0]';
+  const labelClass = 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-[#8E8E94]';
 
   return (
-    <div className="p-8 max-w-[1240px] mx-auto pb-24">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="w-10 h-10 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40]"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+    <main className="mx-auto max-w-5xl p-6 pb-24 text-[#F5F4F0]">
+      <header className="mb-6 flex items-center gap-4">
+        <button onClick={onBack} aria-label="Volver" className="rounded-full border border-[#2A2A2F] p-2 text-[#8E8E94]"><ArrowLeft className="h-5 w-5" /></button>
+        <div><h1 className="text-2xl font-bold">Prescripción nutricional — {client.name}</h1><p className="mt-1 text-xs text-[#8E8E94]">Los campos vacíos permanecen sin dato.</p></div>
+      </header>
 
-          <div>
-            <h1 className="text-2xl font-extrabold font-display text-[#F5F4F0]">
-              Plan nutricional — {client.name}
-            </h1>
-            <div className="flex items-center gap-2 mt-1 text-xs">
-              <span className="px-2.5 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#F5F4F0] font-semibold">
-                {plan.objective}
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94]">
-                {plan.dietType}
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-[#8E8E94]">
-                {plan.meals.length} comidas
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#CFFF5C]/10 border border-[#CFFF5C]/20 text-[#CFFF5C] font-semibold flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Generado automáticamente
-              </span>
-            </div>
+      {nutritionPlanStatus === 'loading' && <p className="mb-4 text-sm text-[#8E8E94]">Cargando borrador guardado…</p>}
+      <section className="mb-6 grid gap-4 rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5 md:grid-cols-2">
+        <label><span className={labelClass}>Nombre del plan</span><input className={inputClass} value={snapshot.plan_name} onChange={event => updateSnapshot(prev => ({ ...prev, plan_name: event.target.value }))} /></label>
+        <label><span className={labelClass}>Objetivo (opcional)</span><input className={inputClass} value={snapshot.objective || ''} onChange={event => updateSnapshot(prev => ({ ...prev, objective: event.target.value || null }))} /></label>
+        <label><span className={labelClass}>Energía objetivo · kcal (opcional)</span><input className={inputClass} type="number" min="0" value={numberInput(snapshot.target_kcal)} onChange={event => updateSnapshot(prev => ({ ...prev, target_kcal: numberOrNull(event.target.value) }))} /></label>
+        {([
+          ['protein_g', 'Proteína · g'], ['carbohydrate_g', 'Carbohidratos · g'], ['fat_g', 'Grasa · g'], ['fiber_g', 'Fibra · g'], ['water_l', 'Agua · l'],
+        ] as const).map(([key, label]) => <label key={key}><span className={labelClass}>{label} (opcional)</span><input className={inputClass} type="number" min="0" value={numberInput(snapshot.targets[key])} onChange={event => updateTarget(key, event.target.value)} /></label>)}
+        <label className="md:col-span-2"><span className={labelClass}>Notas del plan (opcional)</span><textarea className={inputClass} value={snapshot.notes || ''} onChange={event => updateSnapshot(prev => ({ ...prev, notes: event.target.value || null }))} /></label>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between"><h2 className="text-sm font-bold">Comidas pautadas</h2><button onClick={addMeal} className="flex items-center gap-2 rounded-full border border-[#3A3A40] px-3 py-2 text-xs"><Plus className="h-4 w-4" /> Añadir comida</button></div>
+        {snapshot.meals.length === 0 && <p className="rounded-xl border border-dashed border-[#3A3A40] p-5 text-sm text-[#8E8E94]">Sin comidas registradas todavía.</p>}
+        {snapshot.meals.map((meal, mealIndex) => <article key={meal.id} className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5">
+          <div className="mb-4 grid gap-3 md:grid-cols-[1fr_120px_auto]">
+            <label><span className={labelClass}>Nombre</span><input className={inputClass} value={meal.name} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map((item, index) => index === mealIndex ? { ...item, name: event.target.value } : item) }))} /></label>
+            <label><span className={labelClass}>Orden</span><input className={inputClass} type="number" min="1" value={meal.order} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map((item, index) => index === mealIndex ? { ...item, order: Number(event.target.value) } : item) }))} /></label>
+            <button aria-label="Eliminar comida" onClick={() => updateSnapshot(prev => ({ ...prev, meals: prev.meals.filter(item => item.id !== meal.id).map((item, index) => ({ ...item, order: index + 1 })) }))} className="self-end rounded-lg p-2 text-[#8E8E94]"><Trash2 className="h-4 w-4" /></button>
           </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => void handleSavePlan(false)}
-            disabled={isSaving}
-            className="px-5 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
-          >
-            Guardar borrador
-          </button>
-          <button
-            onClick={() => void handleSavePlan(true)}
-            disabled={isSaving}
-            style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-            className="px-6 py-2.5 rounded-full font-bold text-xs shadow-md transition-all active:scale-95"
-          >
-            Guardar y asignar
-          </button>
-        </div>
-      </div>
-
-      {toast && (
-        <div className="mb-4 p-3 rounded-xl bg-[var(--accent-color,#CFFF5C)] text-[#101012] text-xs font-bold text-center animate-in fade-in flex items-center justify-center gap-2">
-          <Check className="w-4 h-4 stroke-[3]" />
-          {toast}
-        </div>
-      )}
-      {saveError && (
-        <div role="alert" className="mb-4 p-3 rounded-xl bg-red-950 text-red-200 text-xs font-bold text-center">
-          No se guardó el plan: {saveError}
-        </div>
-      )}
-
-      {/* 2-Column Grid */}
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left Column: KCAL & Meals */}
-        <div className="col-span-2 space-y-6">
-          {/* KCAL OBJETIVO & Macros */}
-          <div className="p-6 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex items-center gap-8">
-            <div className="shrink-0">
-              <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-1">
-                KCAL OBJETIVO
-              </span>
-              <span className="text-3xl font-extrabold font-display text-[#F5F4F0]">
-                {plan.targetKcal.toLocaleString()} kcal
-              </span>
-            </div>
-
-            <div className="flex-1 space-y-2.5">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#8E8E94]">Proteínas</span>
-                  <span className="font-bold text-[#F5F4F0]">{plan.macros.protein} g</span>
-                </div>
-                <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '80%' }} />
-                </div>
+          <label className="mb-4 block"><span className={labelClass}>Descripción (opcional)</span><input className={inputClass} value={meal.description || ''} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(item => item.id === meal.id ? { ...item, description: event.target.value || null } : item) }))} /></label>
+          <label className="mb-4 block"><span className={labelClass}>Notas (opcional)</span><input className={inputClass} value={meal.notes || ''} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(item => item.id === meal.id ? { ...item, notes: event.target.value || null } : item) }))} /></label>
+          <div className="space-y-3">
+            {meal.items.map(item => <div key={item.id} className="grid gap-2 rounded-xl bg-[#101012] p-3 md:grid-cols-[2fr_100px_110px_1fr_auto]">
+              <label><span className={labelClass}>Alimento / ítem</span><input className={inputClass} value={item.label} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, label: event.target.value } : i) : m.items })) }))} /></label>
+              <label><span className={labelClass}>Cantidad</span><input className={inputClass} type="number" min="0" value={numberInput(item.quantity)} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, quantity: numberOrNull(event.target.value) } : i) : m.items })) }))} /></label>
+              <label><span className={labelClass}>Unidad</span><input className={inputClass} value={item.unit || ''} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, unit: event.target.value || null } : i) : m.items })) }))} /></label>
+              <label><span className={labelClass}>Nota (opcional)</span><input className={inputClass} value={item.notes || ''} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, notes: event.target.value || null } : i) : m.items })) }))} /></label>
+              <button aria-label="Eliminar alimento" onClick={() => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => m.id === meal.id ? { ...m, items: m.items.filter(i => i.id !== item.id) } : m) }))} className="self-end rounded-lg p-2 text-[#8E8E94]"><Trash2 className="h-4 w-4" /></button>
+              <label className="md:col-span-2"><span className={labelClass}>Descripción (opcional)</span><input className={inputClass} value={item.description || ''} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, description: event.target.value || null } : i) : m.items })) }))} /></label>
+              <label className="md:col-span-3"><span className={labelClass}>Alternativas (separadas por coma, opcional)</span><input className={inputClass} value={item.alternatives.join(', ')} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, alternatives: event.target.value.split(',').map(value => value.trim()).filter(Boolean) } : i) : m.items })) }))} /></label>
+              <div className="grid grid-cols-2 gap-2 md:col-span-5 lg:grid-cols-5">
+                {([
+                  ['energy_kcal', 'Kcal'], ['protein_g', 'Proteína · g'], ['carbohydrate_g', 'Carbohidratos · g'], ['fat_g', 'Grasa · g'], ['fiber_g', 'Fibra · g'],
+                ] as const).map(([key, title]) => <label key={key}><span className={labelClass}>{title} (opcional)</span><input className={inputClass} type="number" min="0" value={numberInput(item.nutrients?.[key] ?? null)} onChange={event => updateSnapshot(prev => ({ ...prev, meals: prev.meals.map(m => ({ ...m, items: m.id === meal.id ? m.items.map(i => i.id === item.id ? { ...i, nutrients: { energy_kcal: null, protein_g: null, carbohydrate_g: null, fat_g: null, fiber_g: null, ...i.nutrients, [key]: numberOrNull(event.target.value) } } : i) : m.items })) }))} /></label>)}
               </div>
-
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#8E8E94]">Carbohidratos</span>
-                  <span className="font-bold text-[#F5F4F0]">{plan.macros.carbs} g</span>
-                </div>
-                <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '85%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-[#8E8E94]">Grasas</span>
-                  <span className="font-bold text-[#F5F4F0]">{plan.macros.fat} g</span>
-                </div>
-                <div className="w-full h-1.5 bg-[#2A2A2F] rounded-full overflow-hidden">
-                  <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '70%' }} />
-                </div>
-              </div>
-            </div>
+            </div>)}
+            <button onClick={() => addItem(meal.id)} className="rounded-full border border-dashed border-[#3A3A40] px-3 py-2 text-xs text-[#CFFF5C]">Añadir alimento</button>
           </div>
+        </article>)}
+      </section>
 
-          {/* COMIDAS DEL DÍA */}
-          <div>
-            <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-3 px-1">
-              COMIDAS DEL DÍA
-            </span>
-
-            <div className="rounded-[16px] bg-[#16161A] border border-[#2A2A2F] divide-y divide-[#2A2A2F]/50 overflow-hidden mb-4">
-              {plan.meals.map((meal, idx) => (
-                <div key={meal.id} className="p-4 hover:bg-[#1B1B1F] transition-colors">
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="text-sm font-bold text-[#F5F4F0]">{meal.name}</h4>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingMealIndex(idx);
-                          setEditingIngredientsText(meal.ingredients.join(' · '));
-                        }}
-                        className="p-1.5 rounded-lg text-[#8E8E94] hover:text-[#F5F4F0]"
-                        title="Editar ingredientes"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      {plan.meals.length > 1 && (
-                        <button
-                          onClick={() => handleDeleteMeal(idx)}
-                          className="p-1.5 rounded-lg text-[#8E8E94] hover:text-red-400"
-                          title="Eliminar comida"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {editingMealIndex === idx ? (
-                    <div className="mt-2 flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={editingIngredientsText}
-                        onChange={e => setEditingIngredientsText(e.target.value)}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-[#101012] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
-                      />
-                      <button
-                        onClick={() => handleSaveMealEdit(idx)}
-                        style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold"
-                      >
-                        OK
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-[#8E8E94]">
-                      {meal.ingredients.join(' · ')}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowAddMealModal(true)}
-              className="w-full py-3.5 rounded-[14px] bg-[#16161A] border-2 border-dashed border-[#2A2A2F] hover:border-[var(--accent-color,#CFFF5C)] text-xs font-bold text-[#8E8E94] hover:text-[#F5F4F0] flex items-center justify-center gap-2 transition-colors"
-            >
-              <Plus className="w-4 h-4 text-[var(--accent-color,#CFFF5C)]" />
-              <span>Añadir comida</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Right Column: LISTA DE LA COMPRA GENERADA */}
-        <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <ShoppingCart className="w-4 h-4 text-[var(--accent-color,#CFFF5C)]" />
-              <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">
-                LISTA DE LA COMPRA GENERADA
-              </span>
-            </div>
-
-            <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
-              {plan.shoppingList.map((category, catIdx) => (
-                <div key={catIdx}>
-                  <span className="text-[9.5px] font-bold text-[var(--accent-color,#CFFF5C)] uppercase tracking-wider block mb-1">
-                    {category.category}
-                  </span>
-                  <p className="text-xs text-[#F5F4F0] leading-relaxed">
-                    {category.items.map(i => i.name).join(', ')}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="text-[10px] text-[#5C5C62] pt-4 border-t border-[#2A2A2F]/50 leading-normal">
-            Se actualiza sola al editar las comidas. {client.name.split(' ')[0]} la verá en su app, solo con nombres — sin cantidades.
-          </p>
-        </div>
-      </div>
-
-      {/* Add Meal Modal */}
-      {showAddMealModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-[380px] bg-[#16161A] border border-[#2A2A2F] rounded-[24px] p-5 shadow-2xl">
-            <h3 className="text-base font-bold text-[#F5F4F0] mb-4">
-              Añadir nueva comida
-            </h3>
-
-            <div className="space-y-3 mb-5">
-              <div>
-                <label className="text-[10px] text-[#8E8E94] uppercase font-bold block mb-1">Nombre (ej: Merienda, Pre-entreno)</label>
-                <input
-                  type="text"
-                  value={newMealName}
-                  onChange={e => setNewMealName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-[#8E8E94] uppercase font-bold block mb-1">Ingredientes (separados por punto o coma)</label>
-                <input
-                  type="text"
-                  placeholder="Batido de proteína · Frutos secos"
-                  value={newMealIngredients}
-                  onChange={e => setNewMealIngredients(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowAddMealModal(false)}
-                className="flex-1 py-2 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#8E8E94]"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAddMeal}
-                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-                className="flex-1 py-2 rounded-full font-bold text-xs"
-              >
-                Añadir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {saveError && <p role="alert" className="mt-5 rounded-lg bg-red-950 p-3 text-sm text-red-200">No se confirmó la operación: {saveError}</p>}
+      {notice && <p role="status" className="mt-5 rounded-lg bg-[#CFFF5C]/10 p-3 text-sm text-[#CFFF5C]">{notice}</p>}
+      <footer className="mt-7 flex justify-end gap-3">
+        <button disabled={isSaving} onClick={() => void handleSave(false)} className="rounded-full border border-[#3A3A40] px-5 py-3 text-sm disabled:opacity-50">Guardar borrador</button>
+        <button disabled={isSaving || !valid} onClick={() => void handleSave(true)} className="rounded-full bg-[#CFFF5C] px-5 py-3 text-sm font-bold text-[#101012] disabled:opacity-50">Guardar y asignar</button>
+      </footer>
+    </main>
   );
 };

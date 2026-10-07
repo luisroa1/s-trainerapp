@@ -1,122 +1,100 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { persistNutritionPlanForCurrentUser } from '../src/lib/nutritionPlanPersistence.mjs';
+import { applyNutritionPlan, getActiveNutritionPlan, getNutritionPlanDrafts, saveNutritionPlanDraft } from '../src/lib/nutritionPlanPersistence.mjs';
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-function mockSupabase({ userId = 'authenticated-trainer-uid', authError = null, upsertError = null, noSavedRow = false } = {}) {
-  const calls = { auth: 0, table: null, row: null, options: null };
+function supabaseMock({ userId = 'trainer-uuid', rows = {}, errors = {} } = {}) {
+  const calls = [];
   const client = {
-    auth: {
-      async getUser() {
-        calls.auth += 1;
-        return { data: { user: userId ? { id: userId } : null }, error: authError };
-      },
-    },
+    auth: { async getUser() { calls.push({ auth: true }); return { data: { user: userId ? { id: userId } : null }, error: errors.auth || null }; } },
     from(table) {
-      calls.table = table;
-      return {
-        upsert(row, options) {
-          calls.row = row;
-          calls.options = options;
-          return {
-            select(columns) {
-              calls.selectedColumns = columns;
-              return {
-                async single() {
-                  return { data: upsertError || noSavedRow ? null : { id: row.id }, error: upsertError };
-                },
-              };
-            },
-          };
-        },
+      const call = { table, filters: [], selected: null, body: null, operation: 'select' };
+      calls.push(call);
+      const result = rows[table];
+      const query = {
+        select(value) { call.selected = value; return query; },
+        eq(column, value) { call.filters.push(['eq', column, value]); return query; },
+        is(column, value) { call.filters.push(['is', column, value]); return query; },
+        order(column, options) { call.order = [column, options]; return query; },
+        limit(value) { call.limit = value; return query; },
+        insert(body) { call.operation = 'insert'; call.body = body; return query; },
+        update(body) { call.operation = 'update'; call.body = body; return query; },
+        async single() { return { data: result?.single || null, error: errors[table] || null }; },
+        async maybeSingle() { return { data: result?.single || null, error: errors[table] || null }; },
+        then(resolve, reject) { return Promise.resolve({ data: result?.list || [], error: errors[table] || null }).then(resolve, reject); },
       };
+      return query;
     },
+    async rpc(name, args) { calls.push({ rpc: name, args }); return { data: rows.rpc || null, error: errors.rpc || null }; },
   };
   return { client, calls };
 }
 
-test('nutrition plan ownership comes from Auth and preserves selected client id', async () => {
-  const { client, calls } = mockSupabase();
-  const plan = { id: 'nutrition-plan-1', clientId: 'stale-client', clientName: 'Client', trainer_id: 'caller-controlled' };
+const snapshot = {
+  schema_version: 1,
+  plan_name: 'Plan de prueba',
+  objective: null,
+  target_kcal: null,
+  targets: { protein_g: null, carbohydrate_g: null, fat_g: null, fiber_g: null, water_l: null },
+  meals: [],
+  notes: null,
+};
 
-  await persistNutritionPlanForCurrentUser(client, 'selected-client-id', plan, 'attacker-trainer-id');
-
-  assert.equal(calls.auth, 1);
-  assert.equal(calls.table, 'nutrition_plans');
-  assert.equal(calls.row.trainer_id, 'authenticated-trainer-uid');
-  assert.equal(calls.row.client_id, 'selected-client-id');
-  assert.equal(calls.row.data.clientId, 'selected-client-id');
-  assert.equal('trainer_id' in calls.row.data, false);
-  assert.equal('trainerId' in calls.row.data, false);
-  assert.equal(calls.row.id, 'nutrition-plan-1');
-  assert.deepEqual(calls.options, { onConflict: 'id' });
-  assert.equal(calls.selectedColumns, 'id');
+test('Trainer draft persists only to canonical identity table with Auth ownership', async () => {
+  const { client, calls } = supabaseMock({ rows: { nutrition_plan_definitions: { single: { id: 'identity-1' } } } });
+  const id = await saveNutritionPlanDraft(client, 'client-1', null, snapshot);
+  assert.equal(id, 'identity-1');
+  const write = calls.find(call => call.table === 'nutrition_plan_definitions');
+  assert.equal(write.operation, 'insert');
+  assert.equal(write.body.client_id, 'client-1');
+  assert.equal(write.body.trainer_id, 'trainer-uuid');
+  assert.equal(write.body.draft_snapshot, snapshot);
+  assert.equal(calls.some(call => call.table === 'nutrition_plans'), false);
 });
 
-test('Auth and Supabase write errors reject instead of becoming successful persistence', async () => {
-  const authFailure = new Error('Auth unavailable');
-  const authMock = mockSupabase({ authError: authFailure });
-  await assert.rejects(
-    persistNutritionPlanForCurrentUser(authMock.client, 'client-1', { id: 'plan-1' }),
-    authFailure,
-  );
-  assert.equal(authMock.calls.table, null);
+test('draft persistence and apply reject unconfirmed results', async () => {
+  const unauthenticated = supabaseMock({ userId: null });
+  await assert.rejects(saveNutritionPlanDraft(unauthenticated.client, 'client-1', null, snapshot), /sesión autenticada/);
+  assert.equal(unauthenticated.calls.some(call => call.table), false);
 
-  const writeFailure = new Error('RLS denied');
-  const writeMock = mockSupabase({ upsertError: writeFailure });
-  await assert.rejects(
-    persistNutritionPlanForCurrentUser(writeMock.client, 'client-1', { id: 'plan-1' }),
-    writeFailure,
-  );
+  const noRow = supabaseMock({ rows: { nutrition_plan_definitions: { single: null } } });
+  await assert.rejects(saveNutritionPlanDraft(noRow.client, 'client-1', null, snapshot), /no confirmó/);
 
-  const noUserMock = mockSupabase({ userId: null });
-  await assert.rejects(
-    persistNutritionPlanForCurrentUser(noUserMock.client, 'client-1', { id: 'plan-1' }),
-    /sesión autenticada/,
-  );
-  assert.equal(noUserMock.calls.table, null);
-
-  const noRowMock = mockSupabase({ noSavedRow: true });
-  await assert.rejects(
-    persistNutritionPlanForCurrentUser(noRowMock.client, 'client-1', { id: 'plan-1' }),
-    /no confirmó el guardado/,
-  );
+  const noApplyResult = supabaseMock();
+  await assert.rejects(applyNutritionPlan(noApplyResult.client, 'identity-1', 'request-key'), /no confirmó/);
+  assert.deepEqual(noApplyResult.calls.at(-1), { rpc: 'apply_nutrition_plan', args: { p_plan_id: 'identity-1', p_request_key: 'request-key' } });
 });
 
-test('Trainer save awaits persistence, shows errors, and updates state only after success', () => {
+test('Client active-plan reader follows active assignment to immutable version, not legacy JSON', async () => {
+  const active = { id: 'assignment-1', assigned_at: '2026-10-07T10:00:00Z', nutrition_plan_version_id: 'version-1' };
+  const version = { id: 'version-1', version_number: 1, snapshot };
+  const { client, calls } = supabaseMock({ rows: {
+    clients: { single: { id: 'client-1' } },
+    client_nutrition_assignments: { single: active },
+    nutrition_plan_versions: { single: version },
+  } });
+  const result = await getActiveNutritionPlan(client);
+  assert.deepEqual(result, { assignmentId: active.id, assignedAt: active.assigned_at, versionId: version.id, versionNumber: 1, snapshot });
+  assert.deepEqual(calls.filter(call => call.table).map(call => call.table), ['clients', 'client_nutrition_assignments', 'nutrition_plan_versions']);
+  assert.equal(calls.some(call => call.table === 'nutrition_plans'), false);
+});
+
+test('draft loader reads only canonical draft definitions', async () => {
+  const row = { id: 'identity-1', client_id: 'client-1', draft_snapshot: snapshot };
+  const { client, calls } = supabaseMock({ rows: { nutrition_plan_definitions: { list: [row] } } });
+  assert.deepEqual(await getNutritionPlanDrafts(client), [row]);
+  assert.equal(calls[0].table, 'nutrition_plan_definitions');
+});
+
+test('app and Client UI do not use legacy nutrition cache or checklist as Planned/Logged authority', () => {
   const context = read('../src/context/AppContext.tsx');
-  const update = context.slice(
-    context.indexOf('const updateNutritionPlan ='),
-    context.indexOf('const toggleMealCompleted ='),
-  );
-  assert.match(update, /await supabaseDb\.upsertNutritionPlan\(clientId, plan\)/);
-  assert.match(update, /if \(error\) throw error/);
-  assert.match(update, /userRole !== 'trainer'/);
-  assert.ok(update.indexOf('if (error) throw error') < update.indexOf('setNutritionPlans('));
-
-  const builder = read('../src/components/trainer/TrainerNutritionBuilder.tsx');
-  assert.match(builder, /await updateNutritionPlan\(client\.id, \{ \.\.\.plan, clientId: client\.id \}\)/);
-  assert.match(builder, /setSaveError\(/);
-  assert.match(builder, /No se guardó el plan:/);
-});
-
-test('nutrition plan reads remain keyed by the stored client_id', () => {
-  const supabase = read('../src/lib/supabase.ts');
-  const getter = supabase.slice(
-    supabase.indexOf('async getNutritionPlans'),
-    supabase.indexOf('async upsertNutritionPlan'),
-  );
-  assert.match(getter, /\.from\('nutrition_plans'\)/);
-  assert.match(getter, /\.select\('\*'\)/);
-  assert.match(getter, /result\[row\.client_id\] = row\.data/);
-});
-
-test('other nutrition-plan saves propagate failures to visible client errors', () => {
-  const context = read('../src/context/AppContext.tsx');
-  assert.equal((context.match(/await supabaseDb\.upsertNutritionPlan\(/g) || []).length, 3);
-  assert.equal((context.match(/if \(error\) throw error/g) || []).length >= 3, true);
-  assert.match(read('../src/components/client/ClientNutrition.tsx'), /No se guardó el cambio:/);
-  assert.match(read('../src/components/client/ClientShoppingList.tsx'), /No se guardó el cambio:/);
+  const clientUi = read('../src/components/client/ClientNutrition.tsx');
+  const clientApp = read('../src/components/client/ClientApp.tsx');
+  assert.doesNotMatch(context, /localStorage\.(?:getItem|setItem)\(['"]strainer_nutrition/);
+  assert.match(context, /active assignment -> immutable version/);
+  assert.doesNotMatch(clientUi, /toggleMealCompleted|completed|kcalToday|kcalGoal|nutritionPlans\[/);
+  assert.match(clientUi, /activeNutritionPlan/);
+  assert.doesNotMatch(clientApp, /setCurrentScreen\('(calculadora|lista_compra|suplementos)'\)/);
 });

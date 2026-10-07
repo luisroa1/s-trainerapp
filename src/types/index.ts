@@ -186,6 +186,65 @@ export interface NutritionPlan {
   }[];
 }
 
+/** Canonical Nutrition Planned snapshot, versioned and immutable once assigned. */
+export interface NutritionTargets {
+  protein_g: number | null;
+  carbohydrate_g: number | null;
+  fat_g: number | null;
+  fiber_g: number | null;
+  water_l: number | null;
+}
+
+export interface NutritionItemSnapshot {
+  id: string;
+  label: string;
+  description: string | null;
+  quantity: number | null;
+  unit: string | null;
+  nutrients: {
+    energy_kcal: number | null;
+    protein_g: number | null;
+    carbohydrate_g: number | null;
+    fat_g: number | null;
+    fiber_g: number | null;
+  } | null;
+  notes: string | null;
+  alternatives: string[];
+}
+
+export interface NutritionMealSnapshot {
+  id: string;
+  name: string;
+  order: number;
+  description: string | null;
+  notes: string | null;
+  items: NutritionItemSnapshot[];
+}
+
+export interface NutritionPlanSnapshot {
+  schema_version: 1;
+  plan_name: string;
+  objective: string | null;
+  target_kcal: number | null;
+  targets: NutritionTargets;
+  meals: NutritionMealSnapshot[];
+  notes: string | null;
+}
+
+export interface NutritionPlanDraftRecord {
+  id: string;
+  clientId: string;
+  snapshot: NutritionPlanSnapshot;
+}
+
+export interface ActiveNutritionPlan {
+  assignmentId: string;
+  assignedAt: string;
+  versionId: string;
+  versionNumber: number;
+  snapshot: NutritionPlanSnapshot;
+}
+
 export interface WorkoutSetRecord {
   setNumber: number;
   weight: number;

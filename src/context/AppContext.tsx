@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, AccentColor, TrainerProfile, UserRole } from '../types';
+import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, Program, NutritionPlanDraftRecord, NutritionPlanSnapshot, AccentColor, TrainerProfile, UserRole } from '../types';
 import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
 import { resolveProfileRole } from '../lib/profileRole.mjs';
 import { resolveAccountAccess } from '../lib/accountAccessState.mjs';
@@ -32,7 +32,10 @@ interface AppContextType {
   activeProgramAssignment: ActiveProgramAssignment | null;
   activeProgramAssignmentStatus: 'idle' | 'loading' | 'loaded' | 'error';
   activeProgramAssignmentError: string | null;
-  nutritionPlans: Record<string, NutritionPlan>;
+  nutritionPlans: Record<string, NutritionPlanDraftRecord>;
+  activeNutritionPlan: ActiveNutritionPlan | null;
+  nutritionPlanStatus: 'idle' | 'loading' | 'loaded' | 'error';
+  nutritionPlanError: string | null;
   accentColor: AccentColor;
   setAccentColor: (color: AccentColor) => void;
   updateClient: (id: string, partial: Partial<ClientData>) => void;
@@ -41,10 +44,8 @@ interface AppContextType {
   addTrainerNote: (clientId: string, content: string) => void;
   saveProgram: (program: Program) => Promise<void>;
   applyProgramToClient: (clientId: string, programId: string | null) => Promise<any>;
-  updateNutritionPlan: (clientId: string, plan: NutritionPlan) => Promise<void>;
-  toggleMealCompleted: (clientId: string, mealId: string) => Promise<void>;
-  toggleShoppingItem: (clientId: string, category: string, itemName: string) => Promise<void>;
-  addFoodToLog: (clientId: string, foodName: string, kcal: number, protein?: number) => void;
+  saveNutritionPlanDraft: (clientId: string, planId: string | null, snapshot: NutritionPlanSnapshot) => Promise<string>;
+  applyNutritionPlan: (planId: string, requestKey: string) => Promise<any>;
   resetAllData: () => void;
   // Supabase Auth & Realtime
   supabaseUser: User | null;
@@ -133,20 +134,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const activeProgramOwnerId = useRef<string | null>(null);
 
-  const [nutritionPlans, setNutritionPlans] = useState<Record<string, NutritionPlan>>(() => {
-    const saved = localStorage.getItem('strainer_nutrition');
-    if (!saved) return {};
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed && typeof parsed === 'object' && ('cli-juan' in parsed || 'nut-juan' in parsed)) {
-        localStorage.removeItem('strainer_nutrition');
-        return {};
-      }
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  });
+  const [nutritionPlans, setNutritionPlans] = useState<Record<string, NutritionPlanDraftRecord>>({});
+  const [activeNutritionPlan, setActiveNutritionPlan] = useState<ActiveNutritionPlan | null>(null);
+  const [nutritionPlanStatus, setNutritionPlanStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [nutritionPlanError, setNutritionPlanError] = useState<string | null>(null);
 
   const [accentColor, setAccentColor] = useState<AccentColor>(() => {
     const saved = localStorage.getItem('strainer_accent') || localStorage.getItem('roafit_accent');
@@ -226,10 +217,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [programs]);
 
   useEffect(() => {
-    localStorage.setItem('strainer_nutrition', JSON.stringify(nutritionPlans));
-  }, [nutritionPlans]);
-
-  useEffect(() => {
     localStorage.setItem('strainer_accent', accentColor);
     document.documentElement.style.setProperty('--accent-color', accentColor);
     const darkText = accentColor === '#CFFF5C' || accentColor === '#FFD34D';
@@ -303,6 +290,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setSupabaseStatus('connected');
+      setNutritionPlans({});
+      setActiveNutritionPlan(null);
+      setNutritionPlanStatus('loading');
+      setNutritionPlanError(null);
 
       // Fetch Clients
       const clientsRes = await supabaseDb.getClients();
@@ -333,11 +324,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPrograms([]);
       }
 
-      // Fetch Nutrition
-      const nutritionRes = await supabaseDb.getNutritionPlans();
-      if (!isCurrentAuthState()) return;
-      if (nutritionRes.data) {
-        setNutritionPlans(nutritionRes.data);
+      // Nutrition Planned comes only from trainer-owned draft identities or the
+      // Client's active assignment -> immutable version. Legacy localStorage
+      // and nutrition_plans.data are not read as a fallback.
+      setNutritionPlanStatus('loading');
+      setNutritionPlanError(null);
+      if (authenticatedRole === 'trainer' || authenticatedRole === 'admin') {
+        const nutritionRes = await supabaseDb.getNutritionPlanDrafts();
+        if (!isCurrentAuthState()) return;
+        if (nutritionRes.error) {
+          setNutritionPlanStatus('error');
+          setNutritionPlanError('No se pudieron cargar los borradores nutricionales.');
+        } else {
+          setNutritionPlans(nutritionRes.data || {});
+          setActiveNutritionPlan(null);
+          setNutritionPlanStatus('loaded');
+        }
+      } else if (authenticatedRole === 'client') {
+        const nutritionRes = await supabaseDb.getActiveNutritionPlan();
+        if (!isCurrentAuthState()) return;
+        if (nutritionRes.error) {
+          setNutritionPlanStatus('error');
+          setNutritionPlanError('No se pudo cargar la prescripción nutricional.');
+        } else {
+          setActiveNutritionPlan(nutritionRes.data);
+          setNutritionPlans({});
+          setNutritionPlanStatus('loaded');
+        }
+      } else {
+        setNutritionPlans({});
+        setActiveNutritionPlan(null);
+        setNutritionPlanStatus('loaded');
       }
 
       // Fetch Trainer Profile (filtrado por el id del usuario autenticado si existe)
@@ -638,6 +655,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRealClient(null);
         activeProgramOwnerId.current = null;
         setPrograms([]);
+        setNutritionPlans({});
+        setActiveNutritionPlan(null);
+        setNutritionPlanStatus('idle');
+        setNutritionPlanError(null);
         localStorage.removeItem('strainer_user_role');
         localStorage.removeItem('strainer_trainer');
       }
@@ -684,13 +705,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'nutrition_plans' }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nutrition_plan_definitions' }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          const client_id = payload.new?.client_id;
-          const plan = payload.new?.data as NutritionPlan;
-          if (client_id && plan) {
-            setNutritionPlans(prev => ({ ...prev, [client_id]: plan }));
+          const row = payload.new;
+          if (row?.client_id && row?.id && row?.draft_snapshot && row?.trainer_id === activeProgramOwnerId.current) {
+            setNutritionPlans(prev => ({ ...prev, [row.client_id]: { id: row.id, clientId: row.client_id, snapshot: row.draft_snapshot } }));
           }
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_nutrition_assignments' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          void supabaseDb.getActiveNutritionPlan().then(({ data, error }) => {
+            if (!error) setActiveNutritionPlan(data);
+          });
         }
       })
       .subscribe((status) => {
@@ -890,59 +917,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return data;
   };
 
-  const updateNutritionPlan = async (clientId: string, plan: NutritionPlan) => {
-    if (userRole !== 'trainer') {
-      throw new Error('Solo una cuenta Trainer puede guardar planes nutricionales desde este flujo.');
+  const saveNutritionPlanDraft = async (clientId: string, planId: string | null, snapshot: NutritionPlanSnapshot) => {
+    if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
+      throw new Error('Solo un Trainer habilitado puede guardar un borrador nutricional.');
     }
-    const { error } = await supabaseDb.upsertNutritionPlan(clientId, plan);
+    const { data, error } = await supabaseDb.saveNutritionPlanDraft(clientId, planId, snapshot);
     if (error) throw error;
-    setNutritionPlans(prev => ({ ...prev, [clientId]: { ...plan, clientId } }));
+    if (!data?.id) throw new Error('Supabase no confirmó el borrador.');
+    setNutritionPlans(prev => ({ ...prev, [clientId]: { id: data.id, clientId, snapshot } }));
+    setNutritionPlanStatus('loaded');
+    return data.id;
   };
 
-  const toggleMealCompleted = async (clientId: string, mealId: string) => {
-    const plan = nutritionPlans[clientId];
-    if (!plan) return;
-    const updatedMeals = plan.meals.map(m => m.id === mealId ? { ...m, completed: !m.completed } : m);
-    const updatedPlan = { ...plan, meals: updatedMeals };
-    const { error } = await supabaseDb.upsertNutritionPlan(clientId, updatedPlan);
+  const applyNutritionPlan = async (planId: string, requestKey: string) => {
+    if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
+      throw new Error('Solo un Trainer habilitado puede asignar una prescripción nutricional.');
+    }
+    const { data, error } = await supabaseDb.applyNutritionPlan(planId, requestKey);
     if (error) throw error;
-    setNutritionPlans(prev => ({ ...prev, [clientId]: updatedPlan }));
-  };
-
-  const toggleShoppingItem = async (clientId: string, categoryName: string, itemName: string) => {
-    const plan = nutritionPlans[clientId];
-    if (!plan) return;
-    const updatedCategories = plan.shoppingList.map(cat => {
-      if (cat.category === categoryName) {
-        return {
-          ...cat,
-          items: cat.items.map(item => item.name === itemName ? { ...item, checked: !item.checked } : item)
-        };
-      }
-      return cat;
-    });
-    const updatedPlan = { ...plan, shoppingList: updatedCategories };
-    const { error } = await supabaseDb.upsertNutritionPlan(clientId, updatedPlan);
-    if (error) throw error;
-    setNutritionPlans(prev => ({ ...prev, [clientId]: updatedPlan }));
-  };
-
-  const addFoodToLog = (clientId: string, foodName: string, kcal: number) => {
-    setClients(prev => prev.map(c => {
-      if (c.id === clientId) {
-        if (typeof c.metrics?.kcalToday !== 'number') return c;
-        const updated = {
-          ...c,
-          metrics: {
-            ...c.metrics,
-            kcalToday: c.metrics.kcalToday + kcal
-          }
-        };
-        supabaseDb.upsertClient(updated).catch(() => {});
-        return updated;
-      }
-      return c;
-    }));
+    if (!data?.assignment_id || !data?.version_id) throw new Error('Supabase no confirmó la asignación.');
+    return data;
   };
 
   const resetAllData = () => {
@@ -957,6 +951,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setClients([]);
     setPrograms([]);
     setNutritionPlans({});
+    setActiveNutritionPlan(null);
+    setNutritionPlanStatus('idle');
+    setNutritionPlanError(null);
     setAccentColor('#CFFF5C');
     setActiveClientId('');
   };
@@ -978,6 +975,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeProgramAssignmentStatus,
         activeProgramAssignmentError,
         nutritionPlans,
+        activeNutritionPlan,
+        nutritionPlanStatus,
+        nutritionPlanError,
         accentColor,
         setAccentColor,
         updateClient,
@@ -986,10 +986,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTrainerNote,
         saveProgram,
         applyProgramToClient,
-        updateNutritionPlan,
-        toggleMealCompleted,
-        toggleShoppingItem,
-        addFoodToLog,
+        saveNutritionPlanDraft,
+        applyNutritionPlan,
         resetAllData,
         supabaseUser,
         supabaseSession,

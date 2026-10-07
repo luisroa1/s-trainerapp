@@ -1,226 +1,56 @@
-import React, { useState } from 'react';
-import { ShoppingCart, Pill, Calculator, Check } from 'lucide-react';
+import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { NutritionItemSnapshot } from '../../types';
 
-interface ClientNutritionProps {
-  onOpenShoppingList: () => void;
-  onOpenSupplements: () => void;
-  onOpenCalculator: () => void;
-}
+const show = (value: number | null | undefined, suffix: string) => value == null ? 'Sin dato' : `${value} ${suffix}`;
 
-export const ClientNutrition: React.FC<ClientNutritionProps> = ({
-  onOpenShoppingList,
-  onOpenSupplements,
-  onOpenCalculator
-}) => {
-  const { activeClient, nutritionPlans, toggleMealCompleted } = useApp();
-  const currentPlan = activeClient ? nutritionPlans[activeClient.id] : undefined;
-  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+const NutritionItem: React.FC<{ item: NutritionItemSnapshot }> = ({ item }) => (
+  <li className="rounded-xl bg-[#101012] p-3">
+    <p className="text-sm font-semibold">{item.label}</p>
+    {(item.quantity !== null || item.unit) && <p className="mt-1 text-xs text-[#CFFF5C]">{item.quantity === null ? 'Cantidad sin dato' : item.quantity}{item.unit ? ` ${item.unit}` : ''}</p>}
+    {item.description && <p className="mt-1 text-xs text-[#8E8E94]">{item.description}</p>}
+    {item.notes && <p className="mt-1 text-xs text-[#8E8E94]">{item.notes}</p>}
+    {item.nutrients && <p className="mt-2 text-[11px] text-[#8E8E94]">Pautado: {show(item.nutrients.energy_kcal, 'kcal')} · proteína {show(item.nutrients.protein_g, 'g')} · carbohidratos {show(item.nutrients.carbohydrate_g, 'g')} · grasa {show(item.nutrients.fat_g, 'g')} · fibra {show(item.nutrients.fiber_g, 'g')}</p>}
+    {item.alternatives.length > 0 && <p className="mt-2 text-xs text-[#8E8E94]">Alternativas pautadas: {item.alternatives.join(', ')}</p>}
+  </li>
+);
 
-  const handleMealToggle = async (mealId: string) => {
-    if (!activeClient) return;
-    setPersistenceError(null);
-    try {
-      await toggleMealCompleted(activeClient.id, mealId);
-    } catch (error) {
-      setPersistenceError(error instanceof Error ? error.message : 'No se pudo guardar el cambio.');
-    }
-  };
-
-  const consumedKcal = activeClient?.metrics?.kcalToday || 0;
-  const targetKcal = currentPlan?.targetKcal || activeClient?.metrics?.kcalGoal || 2000;
-  const remainingKcal = Math.max(0, targetKcal - consumedKcal);
-
-  // Circular SVG ring calculation
-  const radius = 62;
-  const circumference = 2 * Math.PI * radius;
-  const progressRatio = targetKcal > 0 ? Math.min(1, consumedKcal / targetKcal) : 0;
-  const strokeDashoffset = circumference * (1 - progressRatio);
+export const ClientNutrition: React.FC = () => {
+  const { activeNutritionPlan, nutritionPlanStatus, nutritionPlanError } = useApp();
+  const snapshot = activeNutritionPlan?.snapshot;
 
   return (
-    <div className="flex flex-col min-h-full pb-20 px-5 pt-4 bg-[#101012] text-[#F5F4F0]">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-2xl font-extrabold font-display text-[#F5F4F0] leading-tight">
-            Mi plan<br />nutricional
-          </h2>
-          <p className="text-xs text-[#8E8E94] mt-1 font-medium">
-            Asignado por tu entrenador
-          </p>
-        </div>
-
-        {/* 3 Action icons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenShoppingList}
-            className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
-            title="Lista de la compra"
-          >
-            <ShoppingCart className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onOpenSupplements}
-            className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
-            title="Suplementación"
-          >
-            <Pill className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onOpenCalculator}
-            className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40] transition-colors"
-            title="Calculadora"
-          >
-            <Calculator className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {persistenceError && (
-        <p role="alert" className="mb-3 rounded-lg bg-red-950 p-2 text-xs text-red-200">
-          No se guardó el cambio: {persistenceError}
-        </p>
-      )}
-
-      {/* Circular Kcal Ring */}
-      <div className="flex flex-col items-center justify-center my-3">
-        <div className="relative w-44 h-44 flex items-center justify-center">
-          <svg className="w-full h-full transform -rotate-90">
-            <circle
-              cx="88"
-              cy="88"
-              r={radius}
-              stroke="#232328"
-              strokeWidth="10"
-              fill="none"
-            />
-            <circle
-              cx="88"
-              cy="88"
-              r={radius}
-              stroke="var(--accent-color, #CFFF5C)"
-              strokeWidth="10"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              fill="none"
-              className="transition-all duration-700 ease-out"
-            />
-          </svg>
-
-          <div className="absolute flex flex-col items-center justify-center text-center">
-            <span className="text-3xl font-extrabold font-display text-[#F5F4F0]">
-              {consumedKcal.toLocaleString()}
-            </span>
-            <span className="text-[11px] text-[#8E8E94] font-medium mt-0.5">
-              de {targetKcal.toLocaleString()} kcal
-            </span>
+    <main className="min-h-full bg-[#101012] px-5 pb-20 pt-5 text-[#F5F4F0]">
+      <header className="mb-5">
+        <h2 className="text-2xl font-extrabold">Mi prescripción nutricional</h2>
+        <p className="mt-1 text-xs text-[#8E8E94]">Información pautada por tu entrenador.</p>
+      </header>
+      {nutritionPlanStatus === 'loading' && <p role="status" className="text-sm text-[#8E8E94]">Cargando prescripción…</p>}
+      {nutritionPlanStatus === 'error' && <p role="alert" className="rounded-xl bg-red-950 p-4 text-sm text-red-200">{nutritionPlanError || 'No se pudo cargar la prescripción.'}</p>}
+      {nutritionPlanStatus === 'loaded' && !snapshot && <section className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5 text-sm text-[#8E8E94]">No tienes una prescripción nutricional activa.</section>}
+      {snapshot && <>
+        <section className="mb-4 rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5">
+          <h3 className="text-lg font-bold">{snapshot.plan_name}</h3>
+          {snapshot.objective && <p className="mt-1 text-sm text-[#8E8E94]">{snapshot.objective}</p>}
+          <p className="mt-4 text-sm">Energía pautada: {show(snapshot.target_kcal, 'kcal')}</p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#8E8E94]">
+            <span>Proteína: {show(snapshot.targets.protein_g, 'g')}</span>
+            <span>Carbohidratos: {show(snapshot.targets.carbohydrate_g, 'g')}</span>
+            <span>Grasa: {show(snapshot.targets.fat_g, 'g')}</span>
+            <span>Fibra: {show(snapshot.targets.fiber_g, 'g')}</span>
+            <span>Agua: {show(snapshot.targets.water_l, 'l')}</span>
           </div>
-        </div>
-
-        <p className="text-xs font-semibold text-[var(--accent-color,#CFFF5C)] mt-2">
-          {remainingKcal} kcal restantes
-        </p>
-      </div>
-
-      {/* 5 Macro Progress Bars */}
-      <div className="p-4 rounded-[16px] bg-[#1B1B1F] border border-[#2A2A2F] space-y-3.5 mb-5 shadow-sm">
-        {/* Proteínas */}
-        <div>
-          <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-            <span className="text-[#F5F4F0]">Proteínas</span>
-            <span className="text-[#8E8E94]">132 / {currentPlan?.macros.protein || 160} g</span>
-          </div>
-          <div className="w-full h-2 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '82%' }} />
-          </div>
-        </div>
-
-        {/* Carbohidratos */}
-        <div>
-          <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-            <span className="text-[#F5F4F0]">Carbohidratos</span>
-            <span className="text-[#8E8E94]">198 / {currentPlan?.macros.carbs || 230} g</span>
-          </div>
-          <div className="w-full h-2 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '86%' }} />
-          </div>
-        </div>
-
-        {/* Grasas */}
-        <div>
-          <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-            <span className="text-[#F5F4F0]">Grasas</span>
-            <span className="text-[#8E8E94]">58 / {currentPlan?.macros.fat || 70} g</span>
-          </div>
-          <div className="w-full h-2 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '82%' }} />
-          </div>
-        </div>
-
-        {/* Fibra */}
-        <div>
-          <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-            <span className="text-[#F5F4F0]">Fibra</span>
-            <span className="text-[#8E8E94]">22 / {currentPlan?.macros.fiber || 30} g</span>
-          </div>
-          <div className="w-full h-2 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '73%' }} />
-          </div>
-        </div>
-
-        {/* Agua */}
-        <div>
-          <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-            <span className="text-[#F5F4F0]">Agua</span>
-            <span className="text-[#8E8E94]">1,8 / {currentPlan?.macros.water || 2.5} L</span>
-          </div>
-          <div className="w-full h-2 bg-[#2A2A2F] rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--accent-color,#CFFF5C)] rounded-full" style={{ width: '72%' }} />
-          </div>
-        </div>
-      </div>
-
-      {/* CUMPLIMIENTO DE HOY */}
-      <div>
-        <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-2.5">
-          CUMPLIMIENTO DE HOY
-        </span>
-        {(!currentPlan || !currentPlan.meals || currentPlan.meals.length === 0) ? (
-          <div className="p-6 rounded-[14px] bg-[#16161A] border border-[#2A2A2F] text-center">
-            <p className="text-xs text-[#8E8E94]">
-              Tu entrenador aún no ha configurado las comidas de tu plan nutricional.
-            </p>
-          </div>
-        ) : (
-        <div className="space-y-2">
-          {currentPlan.meals.map((meal) => (
-            <div
-              key={meal.id}
-              onClick={() => void handleMealToggle(meal.id)}
-              className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
-            >
-              <div>
-                <h4 className="text-sm font-semibold text-[#F5F4F0]">{meal.name}</h4>
-                <p className="text-[11px] text-[#8E8E94] mt-0.5">
-                  {meal.ingredients.join(' · ')}
-                </p>
-              </div>
-
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  meal.completed
-                    ? 'bg-[var(--accent-color,#CFFF5C)] text-[#101012] shadow-sm'
-                    : 'bg-[#16161A] border-2 border-[#2A2A2F]'
-                }`}
-              >
-                {meal.completed && <Check className="w-4 h-4 stroke-[3]" />}
-              </div>
-            </div>
-          ))}
-        </div>
-        )}
-      </div>
-    </div>
+          {snapshot.notes && <p className="mt-3 text-xs text-[#8E8E94]">{snapshot.notes}</p>}
+        </section>
+        <section className="space-y-4">
+          {snapshot.meals.slice().sort((a, b) => a.order - b.order).map(meal => <article key={meal.id} className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-4">
+            <h3 className="font-bold">{meal.name}</h3>
+            {meal.description && <p className="mt-1 text-xs text-[#8E8E94]">{meal.description}</p>}
+            {meal.notes && <p className="mt-1 text-xs text-[#8E8E94]">{meal.notes}</p>}
+            {meal.items.length === 0 ? <p className="mt-3 text-xs text-[#8E8E94]">Sin alimentos pautados.</p> : <ul className="mt-3 space-y-2">{meal.items.map(item => <NutritionItem key={item.id} item={item} />)}</ul>}
+          </article>)}
+        </section>
+      </>}
+    </main>
   );
 };

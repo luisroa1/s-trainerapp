@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { ActiveProgramAssignment, ClientData, Program, NutritionPlan, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
+import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, NutritionPlanDraftRecord, NutritionPlanSnapshot, Program, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
-import { persistNutritionPlanForCurrentUser } from './nutritionPlanPersistence.mjs';
+import { applyNutritionPlan as applyNutritionPlanRequest, getActiveNutritionPlan as readActiveNutritionPlan, getNutritionPlanDrafts as readNutritionPlanDrafts, saveNutritionPlanDraft as persistNutritionPlanDraft } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
 import { clientFieldsFromPersistedData, readOptionalPersistedNumber } from './clientLegacyFields.mjs';
 import { workoutSessionFromRpc } from './workoutExecution.mjs';
@@ -308,34 +308,44 @@ export const supabaseDb = {
     }
   },
 
-  // Nutrition Plans
-  async getNutritionPlans(): Promise<{ data: Record<string, NutritionPlan> | null; error: any }> {
+  // Canonical Nutrition Planned read/write paths.
+  async getNutritionPlanDrafts(): Promise<{ data: Record<string, NutritionPlanDraftRecord> | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('nutrition_plans')
-        .select('*');
-      
-      if (error) return { data: null, error };
-      if (!data || data.length === 0) return { data: {}, error: null };
-
-      const result: Record<string, NutritionPlan> = {};
+      const data = await readNutritionPlanDrafts(supabase);
+      const result: Record<string, NutritionPlanDraftRecord> = {};
       for (const row of data) {
-        if (row.client_id && row.data) {
-          result[row.client_id] = row.data as NutritionPlan;
+        if (row.client_id && row.id && row.draft_snapshot) {
+          result[row.client_id] = { id: row.id, clientId: row.client_id, snapshot: row.draft_snapshot };
         }
       }
       return { data: result, error: null };
-    } catch (err) {
-      return { data: null, error: err };
+    } catch (error) {
+      return { data: null, error };
     }
   },
 
-  async upsertNutritionPlan(clientId: string, plan: NutritionPlan): Promise<{ error: any }> {
+  async getActiveNutritionPlan(): Promise<{ data: ActiveNutritionPlan | null; error: any }> {
     try {
-      await persistNutritionPlanForCurrentUser(supabase, clientId, plan);
-      return { error: null };
-    } catch (err) {
-      return { error: err };
+      return { data: await readActiveNutritionPlan(supabase), error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async saveNutritionPlanDraft(clientId: string, planId: string | null, snapshot: NutritionPlanSnapshot): Promise<{ data: { id: string } | null; error: any }> {
+    try {
+      const id = await persistNutritionPlanDraft(supabase, clientId, planId, snapshot);
+      return { data: { id }, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async applyNutritionPlan(planId: string, requestKey: string): Promise<{ data: any | null; error: any }> {
+    try {
+      return { data: await applyNutritionPlanRequest(supabase, planId, requestKey), error: null };
+    } catch (error) {
+      return { data: null, error };
     }
   },
 

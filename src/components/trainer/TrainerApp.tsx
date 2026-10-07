@@ -18,7 +18,6 @@ import { TrainerClientDetail } from './TrainerClientDetail';
 import { TrainerPrograms } from './TrainerPrograms';
 import { TrainerProgramNew } from './TrainerProgramNew';
 import { TrainerProgramBuilder } from './TrainerProgramBuilder';
-import { TrainerNutritionNew } from './TrainerNutritionNew';
 import { TrainerNutritionBuilder } from './TrainerNutritionBuilder';
 import { TrainerInvite } from './TrainerInvite';
 import { TrainerExport } from './TrainerExport';
@@ -31,7 +30,6 @@ type TrainerNavSection =
   | 'programs'
   | 'program_new'
   | 'program_builder'
-  | 'nutrition_new'
   | 'nutrition_builder'
   | 'invite'
   | 'export'
@@ -554,14 +552,6 @@ export const TrainerApp: React.FC = () => {
               </button>
             </div>
           )
-        )}
-
-        {activeSection === 'nutrition_new' && (
-          <TrainerNutritionNew
-            clientId={nutritionClientId}
-            onBack={() => setActiveSection('client_detail')}
-            onProceedToBuilder={() => setActiveSection('nutrition_builder')}
-          />
         )}
 
         {activeSection === 'nutrition_builder' && (

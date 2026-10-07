@@ -169,7 +169,7 @@ test('localStorage cache cannot reintroduce removed metrics in affected views', 
 test('Nutrition remains deferred and CORE 1F Phase 1 read model remains the execution authority', () => {
   const nutrition = source('../src/components/client/ClientNutrition.tsx');
   const history = source('../src/lib/trainerWorkoutHistory.mjs');
-  assert.match(nutrition, /metrics/); // documented deferred legacy consumer, not silently rebuilt here
+  assert.doesNotMatch(nutrition, /metrics/); // Planned Nutrition is independent of legacy client metrics.
   assert.match(history, /buildTrainerWorkoutHistory/);
   assert.doesNotMatch(source('../src/components/trainer/TrainerDashboard.tsx'), /schedule adherence|adherencia/i);
 });

@@ -6,9 +6,6 @@ import { WorkoutExercise } from './WorkoutExercise';
 import { ClientProgress } from './ClientProgress';
 import { ClientMeasurements } from './ClientMeasurements';
 import { ClientNutrition } from './ClientNutrition';
-import { ClientCalculator } from './ClientCalculator';
-import { ClientShoppingList } from './ClientShoppingList';
-import { ClientSupplements } from './ClientSupplements';
 import { ClientProfile } from './ClientProfile';
 import { ClientDataForm } from './ClientDataForm';
 import { ClientCycle } from './ClientCycle';
@@ -27,9 +24,6 @@ type Screen =
   | 'workout_exercise'
   | 'medidas'
   | 'fotos'
-  | 'calculadora'
-  | 'lista_compra'
-  | 'suplementos'
   | 'datos'
   | 'ciclo'
   | 'recordatorios'
@@ -231,23 +225,7 @@ export const ClientApp: React.FC = () => {
         )}
 
         {currentScreen === 'nutricion' && (
-          <ClientNutrition
-            onOpenShoppingList={() => setCurrentScreen('lista_compra')}
-            onOpenSupplements={() => setCurrentScreen('suplementos')}
-            onOpenCalculator={() => setCurrentScreen('calculadora')}
-          />
-        )}
-
-        {currentScreen === 'calculadora' && (
-          <ClientCalculator onBack={() => setCurrentScreen('nutricion')} />
-        )}
-
-        {currentScreen === 'lista_compra' && (
-          <ClientShoppingList onBack={() => setCurrentScreen('nutricion')} />
-        )}
-
-        {currentScreen === 'suplementos' && (
-          <ClientSupplements onBack={() => setCurrentScreen('nutricion')} />
+          <ClientNutrition />
         )}
 
         {currentScreen === 'perfil' && (

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, NutritionPlanDraftRecord, NutritionPlanSnapshot, Program, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
+import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, NutritionLogEvent, NutritionLogEventInput, NutritionPlanDraftRecord, NutritionPlanSnapshot, Program, TrainerNutritionLogEvent, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { applyNutritionPlan as applyNutritionPlanRequest, getActiveNutritionPlan as readActiveNutritionPlan, getNutritionPlanDrafts as readNutritionPlanDrafts, saveNutritionPlanDraft as persistNutritionPlanDraft } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
@@ -344,6 +344,92 @@ export const supabaseDb = {
   async applyNutritionPlan(planId: string, requestKey: string): Promise<{ data: any | null; error: any }> {
     try {
       return { data: await applyNutritionPlanRequest(supabase, planId, requestKey), error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async getClientNutritionLogDay(nutritionDate: string): Promise<{ data: NutritionLogEvent[] | null; error: any }> {
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) return { data: null, error: authError };
+      if (!authData?.user?.id) return { data: [], error: null };
+      const { data: client, error: clientError } = await supabase.from('clients').select('id').eq('user_id', authData.user.id).maybeSingle();
+      if (clientError) return { data: null, error: clientError };
+      if (!client?.id) return { data: [], error: null };
+      const { data: events, error } = await supabase.from('nutrition_log_events').select('*')
+        .eq('client_id', client.id).eq('nutrition_date', nutritionDate).order('occurred_at', { ascending: true });
+      if (error) return { data: null, error };
+      const rows = events || [];
+      if (!rows.length) return { data: [], error: null };
+      const { data: items, error: itemError } = await supabase.from('nutrition_log_event_items').select('*')
+        .in('event_id', rows.map((event: any) => event.id));
+      if (itemError) return { data: null, error: itemError };
+      const byEvent = new Map<string, any[]>();
+      for (const item of items || []) byEvent.set(item.event_id, [...(byEvent.get(item.event_id) || []), item]);
+      return { data: rows.map((event: any) => ({ ...event, items: byEvent.get(event.id) || [] } as NutritionLogEvent)), error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async recordNutritionLogEvent(input: NutritionLogEventInput): Promise<{ data: { event: NutritionLogEvent; replayed?: boolean; coalesced?: boolean } | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('record_nutrition_log_event', {
+        p_request_key: input.request_key,
+        p_event_type: input.event_type,
+        p_assignment_id: input.assignment_id,
+        p_prescribed_meal_id: input.prescribed_meal_id,
+        p_occurred_at: input.occurred_at,
+        p_timezone_id: input.timezone_id,
+        p_nutrition_date: input.nutrition_date,
+        p_note: input.note ?? null,
+        p_supersedes_event_id: input.supersedes_event_id ?? null,
+        p_items: input.items ?? [],
+      });
+      if (error) return { data: null, error };
+      if (!data?.event?.id || data.event.event_type !== input.event_type) {
+        return { data: null, error: new Error('Supabase no confirmó el registro nutricional.') };
+      }
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async getTrainerNutritionLogHistory(clientId: string, limit = 100): Promise<{ data: TrainerNutritionLogEvent[] | null; error: any }> {
+    try {
+      const { data: events, error } = await supabase.from('nutrition_log_events').select('*')
+        .eq('client_id', clientId).order('occurred_at', { ascending: false }).limit(limit);
+      if (error) return { data: null, error };
+      const rows = events || [];
+      if (!rows.length) return { data: [], error: null };
+      const eventIds = rows.map((event: any) => event.id);
+      const { data: items, error: itemsError } = await supabase.from('nutrition_log_event_items').select('*').in('event_id', eventIds);
+      if (itemsError) return { data: null, error: itemsError };
+      const assignmentIds = [...new Set(rows.map((event: any) => event.assignment_id).filter(Boolean))] as string[];
+      const assignmentsResult = assignmentIds.length
+        ? await supabase.from('client_nutrition_assignments').select('id,nutrition_plan_version_id').eq('client_id', clientId).in('id', assignmentIds)
+        : { data: [], error: null };
+      if (assignmentsResult.error) return { data: null, error: assignmentsResult.error };
+      const versionIds = [...new Set((assignmentsResult.data || []).map((assignment: any) => assignment.nutrition_plan_version_id))] as string[];
+      const versionsResult = versionIds.length
+        ? await supabase.from('nutrition_plan_versions').select('id,snapshot').eq('client_id', clientId).in('id', versionIds)
+        : { data: [], error: null };
+      if (versionsResult.error) return { data: null, error: versionsResult.error };
+      const assignmentVersion = new Map((assignmentsResult.data || []).map((assignment: any) => [assignment.id, assignment.nutrition_plan_version_id]));
+      const snapshots = new Map((versionsResult.data || []).map((version: any) => [version.id, version.snapshot]));
+      const itemsByEvent = new Map<string, any[]>();
+      for (const item of items || []) itemsByEvent.set(item.event_id, [...(itemsByEvent.get(item.event_id) || []), item]);
+      return {
+        data: rows.map((event: any) => {
+          const versionId = assignmentVersion.get(event.assignment_id);
+          const snapshot = versionId ? snapshots.get(versionId) : null;
+          const meal = snapshot?.meals?.find((candidate: any) => candidate.id === event.prescribed_meal_id) || null;
+          return { ...event, items: itemsByEvent.get(event.id) || [], meal_name: meal?.name || null, plan_name: snapshot?.plan_name || null, meal_snapshot: meal } as TrainerNutritionLogEvent;
+        }),
+        error: null,
+      };
     } catch (error) {
       return { data: null, error };
     }

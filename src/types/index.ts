@@ -245,6 +245,80 @@ export interface ActiveNutritionPlan {
   snapshot: NutritionPlanSnapshot;
 }
 
+export type NutritionLogEventType = 'AS_PLANNED' | 'MODIFIED' | 'SKIPPED' | 'EXTRA' | 'VOID';
+export type NutritionLogItemOperation = 'change_quantity' | 'removed' | 'substituted' | 'added';
+
+/** Nutrients are explicit contributions for the declared quantity, not per-100g/serving normalization. */
+export interface NutritionLogEventItem {
+  id: string;
+  event_id: string;
+  client_id: string;
+  operation: NutritionLogItemOperation;
+  planned_item_id: string | null;
+  label: string | null;
+  quantity: number | null;
+  unit: string | null;
+  /** Contribution for this item's explicitly declared event quantity; never a per-100g basis by inference. */
+  energy_kcal: number | null;
+  protein_g: number | null;
+  carbohydrate_g: number | null;
+  fat_g: number | null;
+  fiber_g: number | null;
+  note: string | null;
+}
+
+export interface NutritionLogEvent {
+  id: string;
+  client_id: string;
+  assignment_id: string | null;
+  prescribed_meal_id: string | null;
+  event_type: NutritionLogEventType;
+  occurred_at: string;
+  nutrition_date: string;
+  timezone_id: string;
+  recorded_at: string;
+  actor_id: string;
+  actor_kind: 'client_declaration';
+  note: string | null;
+  supersedes_event_id: string | null;
+  items: NutritionLogEventItem[];
+}
+
+/** All nutrient inputs are explicit contributions for quantity; omitted means unknown, never zero. */
+export interface NutritionLogItemInput {
+  operation: NutritionLogItemOperation;
+  planned_item_id?: string | null;
+  label?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
+  /** Explicit contribution corresponding to quantity; omit/null when unknown. */
+  energy_kcal?: number | null;
+  protein_g?: number | null;
+  carbohydrate_g?: number | null;
+  fat_g?: number | null;
+  fiber_g?: number | null;
+  note?: string | null;
+}
+
+export interface NutritionLogEventInput {
+  request_key: string;
+  event_type: NutritionLogEventType;
+  assignment_id: string | null;
+  prescribed_meal_id: string | null;
+  occurred_at: string;
+  timezone_id: string;
+  nutrition_date: string;
+  note?: string | null;
+  supersedes_event_id?: string | null;
+  items?: NutritionLogItemInput[];
+}
+
+export interface TrainerNutritionLogEvent extends NutritionLogEvent {
+  meal_name: string | null;
+  plan_name: string | null;
+  meal_snapshot: NutritionMealSnapshot | null;
+}
+
 export interface WorkoutSetRecord {
   setNumber: number;
   weight: number;

@@ -14,6 +14,7 @@ import { supabaseDb } from '../../lib/supabase';
 import type { TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
 import { formatPerformedLoad, formatPerformedMeasure, plannedPerformedRows } from '../../lib/trainerWorkoutHistory.mjs';
 import { ClientPathologiesSummary } from './ClientPathologiesSummary';
+import { TrainerNutritionLogHistory } from './TrainerNutritionLogHistory';
 
 interface TrainerClientDetailProps {
   client: ClientData;
@@ -396,7 +397,9 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
         </div>
       )}
 
-      {activeTab !== 'Entrenamientos' && (
+      {activeTab === 'Nutrición' && <TrainerNutritionLogHistory clientId={client.id} />}
+
+      {activeTab !== 'Entrenamientos' && activeTab !== 'Nutrición' && (
         <div className="p-8 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] text-center">
           <p className="text-xs text-[#8E8E94]">
             Datos históricos sincronizados para <span className="text-[#F5F4F0] font-bold">{client.name}</span> en pestaña {activeTab}.

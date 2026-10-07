@@ -245,6 +245,15 @@ export interface ActiveNutritionPlan {
   snapshot: NutritionPlanSnapshot;
 }
 
+export interface NutritionAssignmentContext {
+  id: string;
+  client_id: string;
+  nutrition_plan_version_id: string;
+  assigned_at: string;
+  ended_at: string | null;
+  snapshot: NutritionPlanSnapshot | null;
+}
+
 export type NutritionLogEventType = 'AS_PLANNED' | 'MODIFIED' | 'SKIPPED' | 'EXTRA' | 'VOID';
 export type NutritionLogItemOperation = 'change_quantity' | 'removed' | 'substituted' | 'added';
 

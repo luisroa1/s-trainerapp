@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, NutritionLogEvent, NutritionLogEventInput, NutritionPlanDraftRecord, NutritionPlanSnapshot, Program, TrainerNutritionLogEvent, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
+import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, NutritionAssignmentContext, NutritionLogEvent, NutritionLogEventInput, NutritionPlanDraftRecord, NutritionPlanSnapshot, Program, TrainerNutritionLogEvent, TrainerProfile, UserRole, WorkoutSessionView, WorkoutSetResult, TrainerWorkoutHistoryEntry } from '../types';
 import { validateSupabaseTarget } from './supabaseTarget.mjs';
 import { applyNutritionPlan as applyNutritionPlanRequest, getActiveNutritionPlan as readActiveNutritionPlan, getNutritionPlanDrafts as readNutritionPlanDrafts, saveNutritionPlanDraft as persistNutritionPlanDraft } from './nutritionPlanPersistence.mjs';
 import { clientDataWithoutLegacyAssignment, readAssignedProgramId } from './clientAssignment.mjs';
@@ -349,25 +349,38 @@ export const supabaseDb = {
     }
   },
 
-  async getClientNutritionLogDay(nutritionDate: string): Promise<{ data: NutritionLogEvent[] | null; error: any }> {
+  async getClientNutritionLogDay(nutritionDate: string): Promise<{ data: { events: NutritionLogEvent[]; assignments: NutritionAssignmentContext[] } | null; error: any }> {
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) return { data: null, error: authError };
-      if (!authData?.user?.id) return { data: [], error: null };
+      if (!authData?.user?.id) return { data: { events: [], assignments: [] }, error: null };
       const { data: client, error: clientError } = await supabase.from('clients').select('id').eq('user_id', authData.user.id).maybeSingle();
       if (clientError) return { data: null, error: clientError };
-      if (!client?.id) return { data: [], error: null };
+      if (!client?.id) return { data: { events: [], assignments: [] }, error: null };
       const { data: events, error } = await supabase.from('nutrition_log_events').select('*')
         .eq('client_id', client.id).eq('nutrition_date', nutritionDate).order('occurred_at', { ascending: true });
       if (error) return { data: null, error };
       const rows = events || [];
-      if (!rows.length) return { data: [], error: null };
-      const { data: items, error: itemError } = await supabase.from('nutrition_log_event_items').select('*')
-        .in('event_id', rows.map((event: any) => event.id));
-      if (itemError) return { data: null, error: itemError };
+      const itemsResult = rows.length
+        ? await supabase.from('nutrition_log_event_items').select('*').in('event_id', rows.map((event: any) => event.id))
+        : { data: [], error: null };
+      if (itemsResult.error) return { data: null, error: itemsResult.error };
+      const assignmentsResult = await supabase.from('client_nutrition_assignments')
+        .select('id,client_id,nutrition_plan_version_id,assigned_at,ended_at').eq('client_id', client.id)
+        .order('assigned_at', { ascending: true });
+      if (assignmentsResult.error) return { data: null, error: assignmentsResult.error };
+      const versionIds = [...new Set((assignmentsResult.data || []).map((assignment: any) => assignment.nutrition_plan_version_id))] as string[];
+      const versionsResult = versionIds.length
+        ? await supabase.from('nutrition_plan_versions').select('id,snapshot').eq('client_id', client.id).in('id', versionIds)
+        : { data: [], error: null };
+      if (versionsResult.error) return { data: null, error: versionsResult.error };
+      const snapshots = new Map((versionsResult.data || []).map((version: any) => [version.id, version.snapshot]));
+      const assignments: NutritionAssignmentContext[] = (assignmentsResult.data || []).map((assignment: any) => ({
+        ...assignment, snapshot: snapshots.get(assignment.nutrition_plan_version_id) || null,
+      }));
       const byEvent = new Map<string, any[]>();
-      for (const item of items || []) byEvent.set(item.event_id, [...(byEvent.get(item.event_id) || []), item]);
-      return { data: rows.map((event: any) => ({ ...event, items: byEvent.get(event.id) || [] } as NutritionLogEvent)), error: null };
+      for (const item of itemsResult.data || []) byEvent.set(item.event_id, [...(byEvent.get(item.event_id) || []), item]);
+      return { data: { events: rows.map((event: any) => ({ ...event, items: byEvent.get(event.id) || [] } as NutritionLogEvent)), assignments }, error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -397,20 +410,42 @@ export const supabaseDb = {
     }
   },
 
-  async getTrainerNutritionLogHistory(clientId: string, limit = 100): Promise<{ data: TrainerNutritionLogEvent[] | null; error: any }> {
+  async getTrainerNutritionLogHistory(clientId: string, limit = 100, nutritionDate?: string): Promise<{ data: { events: TrainerNutritionLogEvent[]; assignments: NutritionAssignmentContext[] } | null; error: any }> {
     try {
-      const { data: events, error } = await supabase.from('nutrition_log_events').select('*')
-        .eq('client_id', clientId).order('occurred_at', { ascending: false }).limit(limit);
-      if (error) return { data: null, error };
-      const rows = events || [];
-      if (!rows.length) return { data: [], error: null };
-      const eventIds = rows.map((event: any) => event.id);
-      const { data: items, error: itemsError } = await supabase.from('nutrition_log_event_items').select('*').in('event_id', eventIds);
-      if (itemsError) return { data: null, error: itemsError };
-      const assignmentIds = [...new Set(rows.map((event: any) => event.assignment_id).filter(Boolean))] as string[];
-      const assignmentsResult = assignmentIds.length
-        ? await supabase.from('client_nutrition_assignments').select('id,nutrition_plan_version_id').eq('client_id', clientId).in('id', assignmentIds)
+      const pageSize = nutritionDate ? 500 : limit;
+      const rows: any[] = [];
+      for (let from = 0; ; from += pageSize) {
+        let eventQuery = supabase.from('nutrition_log_events').select('*').eq('client_id', clientId);
+        if (nutritionDate) eventQuery = eventQuery.eq('nutrition_date', nutritionDate);
+        const { data: events, error } = await eventQuery.order('occurred_at', { ascending: false }).range(from, from + pageSize - 1);
+        if (error) return { data: null, error };
+        const page = events || [];
+        rows.push(...page);
+        if (!nutritionDate || page.length < pageSize) break;
+      }
+      // Complete correction chains for the visible page in bounded batches so a
+      // page boundary cannot make a valid current head look like a broken chain.
+      const allRows = new Map<string, any>(rows.map((event: any) => [event.id, event]));
+      let predecessorIds = [...new Set(rows.map((event: any) => event.supersedes_event_id).filter(Boolean))] as string[];
+      while (predecessorIds.length) {
+        const missing = predecessorIds.filter(id => !allRows.has(id));
+        if (!missing.length) break;
+        const { data: predecessors, error: predecessorError } = await supabase.from('nutrition_log_events').select('*')
+          .eq('client_id', clientId).in('id', missing);
+        if (predecessorError) return { data: null, error: predecessorError };
+        const fetched = predecessors || [];
+        for (const event of fetched) allRows.set(event.id, event);
+        predecessorIds = [...new Set(fetched.map((event: any) => event.supersedes_event_id).filter(Boolean))] as string[];
+      }
+      const completeRows = [...allRows.values()];
+      const eventIds = completeRows.map((event: any) => event.id);
+      const itemsResult = eventIds.length
+        ? await supabase.from('nutrition_log_event_items').select('*').in('event_id', eventIds)
         : { data: [], error: null };
+      if (itemsResult.error) return { data: null, error: itemsResult.error };
+      const assignmentsResult = await supabase.from('client_nutrition_assignments')
+        .select('id,client_id,nutrition_plan_version_id,assigned_at,ended_at').eq('client_id', clientId)
+        .order('assigned_at', { ascending: true });
       if (assignmentsResult.error) return { data: null, error: assignmentsResult.error };
       const versionIds = [...new Set((assignmentsResult.data || []).map((assignment: any) => assignment.nutrition_plan_version_id))] as string[];
       const versionsResult = versionIds.length
@@ -419,15 +454,19 @@ export const supabaseDb = {
       if (versionsResult.error) return { data: null, error: versionsResult.error };
       const assignmentVersion = new Map((assignmentsResult.data || []).map((assignment: any) => [assignment.id, assignment.nutrition_plan_version_id]));
       const snapshots = new Map((versionsResult.data || []).map((version: any) => [version.id, version.snapshot]));
+      const assignments: NutritionAssignmentContext[] = (assignmentsResult.data || []).map((assignment: any) => ({
+        ...assignment,
+        snapshot: snapshots.get(assignment.nutrition_plan_version_id) || null,
+      }));
       const itemsByEvent = new Map<string, any[]>();
-      for (const item of items || []) itemsByEvent.set(item.event_id, [...(itemsByEvent.get(item.event_id) || []), item]);
+      for (const item of itemsResult.data || []) itemsByEvent.set(item.event_id, [...(itemsByEvent.get(item.event_id) || []), item]);
       return {
-        data: rows.map((event: any) => {
+        data: { events: completeRows.map((event: any) => {
           const versionId = assignmentVersion.get(event.assignment_id);
           const snapshot = versionId ? snapshots.get(versionId) : null;
           const meal = snapshot?.meals?.find((candidate: any) => candidate.id === event.prescribed_meal_id) || null;
           return { ...event, items: itemsByEvent.get(event.id) || [], meal_name: meal?.name || null, plan_name: snapshot?.plan_name || null, meal_snapshot: meal } as TrainerNutritionLogEvent;
-        }),
+        }), assignments },
         error: null,
       };
     } catch (error) {

@@ -27,3 +27,8 @@ test('Trainer UI reads canonical declarations and distinguishes correction/void 
   assert.match(trainer, /Corregida/);
   assert.match(trainer, /Anulación conservada como historial/);
 });
+
+test('Client and Trainer both consume the single shared Planned-vs-Logged reconstruction', () => {
+  assert.match(client, /reconstructNutritionDay/);
+  assert.match(trainer, /reconstructNutritionDay/);
+});

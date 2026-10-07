@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NutritionItemSnapshot, NutritionLogEvent, NutritionLogEventInput, NutritionLogEventType, NutritionLogItemInput } from '../../types';
+import { NutritionAssignmentContext, NutritionItemSnapshot, NutritionLogEvent, NutritionLogEventInput, NutritionLogEventType, NutritionLogItemInput } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { supabaseDb } from '../../lib/supabase';
-import { currentMealDeclaration, nutritionDateForInstant, nutritionDeclarationLabel } from '../../lib/nutritionLogModel.mjs';
+import { nutritionDateForInstant, nutritionDeclarationLabel } from '../../lib/nutritionLogModel.mjs';
+import { reconstructNutritionDay } from '../../lib/nutritionPlannedLoggedModel';
 import { prepareNutritionLogRequest } from '../../lib/nutritionLogRequest.mjs';
 
 const show = (value: number | null | undefined, suffix: string) => value == null ? 'Sin dato' : `${value} ${suffix}`;
 const timezoneId = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const asNullableNumber = (value: string) => value.trim() === '' ? null : Number(value);
 const valueOrBlank = (value: number | null | undefined) => value == null ? '' : String(value);
-const displayQuantity = (value: number | null, unit: string | null) => value == null ? 'cantidad sin dato' : `${value}${unit ? ` ${unit}` : ''}`;
 
 type ChangeDraft = { operation: 'unchanged' | 'change_quantity' | 'removed' | 'substituted'; quantity: string; unit: string; label: string; nutrients: Record<string, string> };
 const emptyNutrients = () => ({ energy_kcal: '', protein_g: '', carbohydrate_g: '', fat_g: '', fiber_g: '' });
@@ -49,6 +49,7 @@ export const ClientNutrition: React.FC = () => {
   const tz = useMemo(timezoneId, []);
   const [today, setToday] = useState(() => nutritionDateForInstant(new Date(), tz));
   const [events, setEvents] = useState<NutritionLogEvent[]>([]);
+  const [assignments, setAssignments] = useState<NutritionAssignmentContext[]>([]);
   const [logStatus, setLogStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [logError, setLogError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -70,11 +71,14 @@ export const ClientNutrition: React.FC = () => {
     setLogError(null);
     const { data, error } = await supabaseDb.getClientNutritionLogDay(date);
     if (error || !data) {
+      setEvents([]);
+      setAssignments([]);
       setLogStatus('error');
       setLogError('No se pudieron cargar tus declaraciones nutricionales.');
       return false;
     }
-    setEvents(data);
+    setEvents(data.events);
+    setAssignments(data.assignments);
     setLogStatus('loaded');
     return true;
   }, [today]);
@@ -111,8 +115,12 @@ export const ClientNutrition: React.FC = () => {
     }
   };
 
-  const sortedMeals = snapshot?.meals.slice().sort((a, b) => a.order - b.order) || [];
-  const mealEvent = (mealId: string): NutritionLogEvent | null => currentMealDeclaration(events, activeNutritionPlan?.assignmentId || '', mealId, today) as NutritionLogEvent | null;
+  const reconstruction = useMemo(() => reconstructNutritionDay({
+    nutritionDate: today,
+    assignments,
+    events,
+  }), [assignments, events, today]);
+  const sortedMeals = reconstruction.meals.filter(row => row.meal).sort((a, b) => a.meal!.order - b.meal!.order);
 
   return (
     <main className="min-h-full bg-[#101012] px-5 pb-20 pt-5 text-[#F5F4F0]">
@@ -136,8 +144,9 @@ export const ClientNutrition: React.FC = () => {
           {snapshot.notes && <p className="mt-3 text-xs text-[#8E8E94]">{snapshot.notes}</p>}
         </section>
         <section className="space-y-4">
-          {sortedMeals.map(meal => {
-            const declaration = activeNutritionPlan ? mealEvent(meal.id) : null;
+          {sortedMeals.map(reconstructed => {
+            const meal = reconstructed.meal!;
+            const declaration = reconstructed?.declaration || null;
             const isEditing = editMealId === meal.id;
             const baseChanges: Record<string, ChangeDraft> = Object.fromEntries(meal.items.map(item => [item.id, { operation: 'unchanged', quantity: valueOrBlank(item.quantity), unit: item.unit || '', label: '', nutrients: emptyNutrients() }]));
             const changes = { ...baseChanges, ...(changesByMeal[meal.id] || {}) };
@@ -157,16 +166,20 @@ export const ClientNutrition: React.FC = () => {
             const openEditor = () => {
               const nextChanges = { ...baseChanges };
               const nextAdded: Array<{ label: string; quantity: string; unit: string; nutrients: Record<string, string>; note: string }> = [];
-              for (const item of declaration?.items || []) {
-                if (item.operation === 'added') {
-                  nextAdded.push({ label: item.label || '', quantity: valueOrBlank(item.quantity), unit: item.unit || '', nutrients: Object.fromEntries(['energy_kcal', 'protein_g', 'carbohydrate_g', 'fat_g', 'fiber_g'].map(key => [key, valueOrBlank(item[key as keyof typeof item] as number | null)])), note: item.note || '' });
+              for (const row of reconstructed?.items || []) {
+                const item = row.logged;
+                if (!item) continue;
+                const nutrients = Object.fromEntries(['energy_kcal', 'protein_g', 'carbohydrate_g', 'fat_g', 'fiber_g'].map(key => [key, valueOrBlank(item[key as keyof typeof item] as number | null)]));
+                if (row.kind === 'added') {
+                  nextAdded.push({ label: item.label || '', quantity: valueOrBlank(item.quantity), unit: item.unit || '', nutrients, note: item.note || '' });
                 } else if (item.planned_item_id && nextChanges[item.planned_item_id]) {
+                  const operation: ChangeDraft['operation'] = row.kind === 'quantity_changed' ? 'change_quantity' : row.kind;
                   nextChanges[item.planned_item_id] = {
-                    operation: item.operation,
+                    operation,
                     quantity: valueOrBlank(item.quantity),
                     unit: item.unit || '',
                     label: item.label || '',
-                    nutrients: Object.fromEntries(['energy_kcal', 'protein_g', 'carbohydrate_g', 'fat_g', 'fiber_g'].map(key => [key, valueOrBlank(item[key as keyof typeof item] as number | null)])),
+                    nutrients,
                   };
                 }
               }
@@ -175,30 +188,33 @@ export const ClientNutrition: React.FC = () => {
               setMealNotes(prev => ({ ...prev, [meal.id]: declaration?.note || '' }));
               setEditMealId(meal.id);
             };
-            return <article key={meal.id} className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-4">
+            return <article key={`${reconstructed.assignmentId || 'unknown'}-${meal.id}`} className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-4">
               <h3 className="font-bold">{meal.name}</h3>
+              {reconstructed?.assignmentId !== activeNutritionPlan?.assignmentId && reconstructed?.planName && <p className="mt-1 text-[11px] text-[#8E8E94]">Prescripción histórica: {reconstructed.planName}</p>}
               {meal.description && <p className="mt-1 text-xs text-[#8E8E94]">{meal.description}</p>}
               {meal.notes && <p className="mt-1 text-xs text-[#8E8E94]">{meal.notes}</p>}
               {meal.items.length === 0 ? <p className="mt-3 text-xs text-[#8E8E94]">Sin alimentos pautados.</p> : <ul className="mt-3 space-y-2">{meal.items.map(item => <NutritionItem key={item.id} item={item} />)}</ul>}
-              <p className="mt-3 text-xs text-[#8E8E94]">{declaration ? nutritionDeclarationLabel(declaration.event_type) : 'Sin registro'}</p>
-              {declaration?.event_type === 'MODIFIED' && declaration.items.length > 0 && <ul className="mt-2 space-y-1 text-xs text-[#C2C2C7]">{declaration.items.map(item => {
-                const plannedItem = meal.items.find(candidate => candidate.id === item.planned_item_id);
-                const label = item.operation === 'removed' ? `Retiró ${plannedItem?.label || 'un elemento pautado'}` : item.operation === 'change_quantity' ? `Cambió ${plannedItem?.label || 'un elemento'} a ${displayQuantity(item.quantity, item.unit)}` : item.operation === 'substituted' ? `Sustituyó ${plannedItem?.label || 'un elemento'} por ${item.label || 'un alimento'}` : `Añadió ${item.label || 'un alimento'}`;
-                return <li key={item.id}>{label}</li>;
+              <p className="mt-3 text-xs text-[#8E8E94]">{reconstructed?.state === 'HISTORICAL_CONTEXT_UNAVAILABLE' ? 'Contexto histórico no disponible' : declaration ? nutritionDeclarationLabel(declaration.event_type) : reconstructed?.state === 'UNLOGGED' ? 'Sin registro' : 'Contexto histórico no disponible'}</p>
+              {reconstructed?.state === 'MODIFIED' && <ul className="mt-2 space-y-1 text-xs text-[#C2C2C7]">{reconstructed.items.map((row, index) => {
+                if (row.kind === 'unchanged') return <li key={row.planned?.id || index}>{row.planned?.label}: según lo pautado</li>;
+                if (row.kind === 'removed') return <li key={row.planned?.id || index}>Retiró {row.planned?.label}</li>;
+                if (row.kind === 'substituted') return <li key={row.planned?.id || index}>Sustituyó {row.planned?.label} por {row.logged?.label || 'un alimento'}</li>;
+                if (row.kind === 'added') return <li key={row.logged?.id || index}>Añadió {row.logged?.label || 'un alimento'} · {row.logged?.quantity == null ? 'cantidad sin dato' : `${row.logged.quantity}${row.logged.unit ? ` ${row.logged.unit}` : ''}`}</li>;
+                return <li key={row.planned?.id || index}>Cambió {row.planned?.label} de {row.planned?.quantity == null ? 'cantidad sin dato' : `${row.planned.quantity}${row.planned.unit ? ` ${row.planned.unit}` : ''}`} a {row.logged?.quantity == null ? 'cantidad sin dato' : `${row.logged.quantity}${row.logged.unit ? ` ${row.logged.unit}` : ''}`}</li>;
               })}</ul>}
-              {!declaration && <div className="mt-3 flex flex-wrap gap-2">
-                <button disabled={saving || !activeNutritionPlan || logStatus !== 'loaded'} onClick={() => activeNutritionPlan && void submit('AS_PLANNED', activeNutritionPlan.assignmentId, meal.id, null)} className="rounded-full bg-[#CFFF5C] px-3 py-2 text-xs font-bold text-[#101012] disabled:opacity-50">Hecho según el plan</button>
+              {!declaration && reconstructed?.state !== 'HISTORICAL_CONTEXT_UNAVAILABLE' && <div className="mt-3 flex flex-wrap gap-2">
+                <button disabled={saving || !reconstructed.assignmentId || logStatus !== 'loaded'} onClick={() => reconstructed.assignmentId && void submit('AS_PLANNED', reconstructed.assignmentId, meal.id, null)} className="rounded-full bg-[#CFFF5C] px-3 py-2 text-xs font-bold text-[#101012] disabled:opacity-50">Hecho según el plan</button>
                 <button disabled={saving || !activeNutritionPlan || logStatus !== 'loaded'} onClick={openEditor} className="rounded-full border border-[#34343A] px-3 py-2 text-xs disabled:opacity-50">Registrar cambios</button>
-                <button disabled={saving || !activeNutritionPlan || logStatus !== 'loaded'} onClick={() => activeNutritionPlan && void submit('SKIPPED', activeNutritionPlan.assignmentId, meal.id, null)} className="rounded-full border border-[#34343A] px-3 py-2 text-xs text-[#C2C2C7] disabled:opacity-50">No la hice</button>
+                <button disabled={saving || !reconstructed.assignmentId || logStatus !== 'loaded'} onClick={() => reconstructed.assignmentId && void submit('SKIPPED', reconstructed.assignmentId, meal.id, null)} className="rounded-full border border-[#34343A] px-3 py-2 text-xs text-[#C2C2C7] disabled:opacity-50">No la hice</button>
               </div>}
               {declaration && <button disabled={saving || logStatus !== 'loaded'} onClick={openEditor} className="mt-2 rounded-full border border-[#34343A] px-3 py-2 text-xs disabled:opacity-50">Corregir declaración</button>}
               {isEditing && <div className="mt-4 space-y-3 rounded-xl border border-[#34343A] p-3">
                 <p className="text-xs text-[#C2C2C7]">Registra solo los cambios. Los elementos que no modifiques quedarán declarados como realizados según el plan.</p>
                 <div className="flex flex-wrap gap-2">
                   {(['AS_PLANNED', 'MODIFIED', 'SKIPPED'] as const).map(type => <button key={type} disabled={saving} onClick={() => {
-                    if (!activeNutritionPlan) return;
+                    if (!reconstructed.assignmentId) return;
                     if (type === 'MODIFIED') return;
-                    void submit(type, activeNutritionPlan.assignmentId, meal.id, declaration?.id || null);
+                    void submit(type, reconstructed.assignmentId, meal.id, declaration?.id || null);
                   }} className="rounded-full border border-[#34343A] px-3 py-2 text-xs">{type === 'AS_PLANNED' ? 'Hecho según el plan' : type === 'SKIPPED' ? 'No la hice' : 'Registrar cambios'}</button>)}
                 </div>
                 {meal.items.map(item => {
@@ -228,7 +244,7 @@ export const ClientNutrition: React.FC = () => {
                 <button onClick={() => setNewItems(prev => [...prev, { label: '', quantity: '', unit: '', nutrients: emptyNutrients(), note: '' }])} className="rounded-full border border-[#34343A] px-3 py-2 text-xs">Añadir alimento</button>
                 <input className={InputClass} aria-label="Nota de la declaración" placeholder="Nota opcional" value={mealNote} onChange={event => setMealNotes(prev => ({ ...prev, [meal.id]: event.target.value }))} />
                 <div className="flex gap-2">
-                  <button disabled={saving || itemInputs.length === 0 || itemInputs.some(item => (item.operation === 'substituted' || item.operation === 'added') && !item.label?.trim()) || itemInputs.some(item => item.operation === 'change_quantity' && item.quantity == null)} onClick={() => activeNutritionPlan && void submit('MODIFIED', activeNutritionPlan.assignmentId, meal.id, declaration?.id || null, itemInputs, mealNote || null)} className="rounded-full bg-[#CFFF5C] px-3 py-2 text-xs font-bold text-[#101012] disabled:opacity-40">Guardar cambios</button>
+                  <button disabled={saving || !reconstructed.assignmentId || itemInputs.length === 0 || itemInputs.some(item => (item.operation === 'substituted' || item.operation === 'added') && !item.label?.trim()) || itemInputs.some(item => item.operation === 'change_quantity' && item.quantity == null)} onClick={() => reconstructed.assignmentId && void submit('MODIFIED', reconstructed.assignmentId, meal.id, declaration?.id || null, itemInputs, mealNote || null)} className="rounded-full bg-[#CFFF5C] px-3 py-2 text-xs font-bold text-[#101012] disabled:opacity-40">Guardar cambios</button>
                   <button onClick={() => setEditMealId(null)} className="rounded-full border border-[#34343A] px-3 py-2 text-xs">Cancelar</button>
                 </div>
               </div>}
@@ -236,6 +252,15 @@ export const ClientNutrition: React.FC = () => {
           })}
         </section>
       </>}
+      {!snapshot && reconstruction.meals.length > 0 && <section className="space-y-3">
+        <h3 className="text-base font-bold">Declaraciones vinculadas a la prescripción histórica</h3>
+        {reconstruction.meals.map((row, index) => <article key={`${row.assignmentId || 'unknown'}-${row.mealId || index}`} className="rounded-xl border border-[#2A2A2F] bg-[#16161A] p-4">
+          <h4 className="text-sm font-semibold">{row.planName ? `${row.planName} · ` : ''}{row.meal?.name || 'Comida pautada'}</h4>
+          <p className="mt-1 text-xs text-[#8E8E94]">{row.state === 'AS_PLANNED' ? 'Hecho según el plan — declarado por ti' : row.state === 'MODIFIED' ? 'Modificado — declarado por ti' : row.state === 'SKIPPED' ? 'No realizada — declarado por ti' : row.state === 'UNLOGGED' ? 'Sin registro' : 'Contexto histórico no disponible'}</p>
+          {row.meal && <ul className="mt-2 space-y-1 text-xs text-[#C2C2C7]">{row.meal.items.map(item => <li key={item.id}>{item.label} · {item.quantity == null ? 'cantidad sin dato' : `${item.quantity}${item.unit ? ` ${item.unit}` : ''}`}</li>)}</ul>}
+          {row.state === 'MODIFIED' && <ul className="mt-2 space-y-1 text-xs text-[#C2C2C7]">{row.items.map((item, itemIndex) => <li key={item.planned?.id || item.logged?.id || itemIndex}>{item.kind === 'unchanged' ? `${item.planned?.label}: según lo pautado` : item.kind === 'removed' ? `Retiró ${item.planned?.label}` : item.kind === 'substituted' ? `Sustituyó ${item.planned?.label} por ${item.logged?.label || 'un elemento'}` : item.kind === 'added' ? `Añadió ${item.logged?.label || 'un elemento'}` : `Cambió ${item.planned?.label} a ${item.logged?.quantity == null ? 'cantidad sin dato' : `${item.logged.quantity}${item.logged.unit ? ` ${item.logged.unit}` : ''}`}`}</li>)}</ul>}
+        </article>)}
+      </section>}
       <section className="mt-5 rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-4">
         <h3 className="font-bold">Algo fuera del plan</h3>
         <p className="mt-1 text-xs text-[#8E8E94]">Registra lo que declaras haber añadido. No inferimos nutrientes por el nombre.</p>
@@ -249,7 +274,7 @@ export const ClientNutrition: React.FC = () => {
       </section>
       {logStatus === 'loading' && <p role="status" className="mt-3 text-xs text-[#8E8E94]">Cargando declaraciones de hoy…</p>}
       {logStatus === 'error' && <p role="alert" className="mt-3 text-xs text-red-300">{logError || 'No se pudieron cargar los registros.'}</p>}
-      {events.filter(event => event.nutrition_date === today && (event.event_type === 'EXTRA' || event.event_type === 'VOID') && !events.some(next => next.supersedes_event_id === event.id)).map(event => <div key={event.id} className="mt-2 flex items-center gap-3 text-xs text-[#8E8E94]">
+      {reconstruction.extras.map(({ event }) => <div key={event.id} className="mt-2 flex items-center gap-3 text-xs text-[#8E8E94]">
         <span>{nutritionDeclarationLabel(event.event_type)}{event.event_type === 'EXTRA' ? ` · ${event.items.map(item => item.label || 'Alimento').join(', ')}` : ''}</span>
         {event.event_type === 'EXTRA' && <button disabled={saving} onClick={() => void submit('VOID', null, null, event.id)} className="rounded-full border border-[#34343A] px-2 py-1 disabled:opacity-50">Anular declaración extra</button>}
       </div>)}

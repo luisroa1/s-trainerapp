@@ -410,18 +410,19 @@ export const supabaseDb = {
     }
   },
 
-  async getTrainerNutritionLogHistory(clientId: string, limit = 100, nutritionDate?: string): Promise<{ data: { events: TrainerNutritionLogEvent[]; assignments: NutritionAssignmentContext[] } | null; error: any }> {
+  async getTrainerNutritionLogHistory(clientId: string, limit = 100, nutritionDate?: string, dateRange?: { startDate: string; endDate: string }): Promise<{ data: { events: TrainerNutritionLogEvent[]; assignments: NutritionAssignmentContext[] } | null; error: any }> {
     try {
-      const pageSize = nutritionDate ? 500 : limit;
+      const pageSize = nutritionDate || dateRange ? 500 : limit;
       const rows: any[] = [];
       for (let from = 0; ; from += pageSize) {
         let eventQuery = supabase.from('nutrition_log_events').select('*').eq('client_id', clientId);
         if (nutritionDate) eventQuery = eventQuery.eq('nutrition_date', nutritionDate);
+        if (dateRange) eventQuery = eventQuery.gte('nutrition_date', dateRange.startDate).lte('nutrition_date', dateRange.endDate);
         const { data: events, error } = await eventQuery.order('occurred_at', { ascending: false }).range(from, from + pageSize - 1);
         if (error) return { data: null, error };
         const page = events || [];
         rows.push(...page);
-        if (!nutritionDate || page.length < pageSize) break;
+        if ((!nutritionDate && !dateRange) || page.length < pageSize) break;
       }
       // Complete correction chains for the visible page in bounded batches so a
       // page boundary cannot make a valid current head look like a broken chain.
@@ -443,9 +444,18 @@ export const supabaseDb = {
         ? await supabase.from('nutrition_log_event_items').select('*').in('event_id', eventIds)
         : { data: [], error: null };
       if (itemsResult.error) return { data: null, error: itemsResult.error };
-      const assignmentsResult = await supabase.from('client_nutrition_assignments')
-        .select('id,client_id,nutrition_plan_version_id,assigned_at,ended_at').eq('client_id', clientId)
-        .order('assigned_at', { ascending: true });
+      let assignmentQuery = supabase.from('client_nutrition_assignments')
+        .select('id,client_id,nutrition_plan_version_id,assigned_at,ended_at').eq('client_id', clientId);
+      if (dateRange) {
+        // Include assignments that could overlap any Client-local date in the
+        // requested range (IANA offsets are bounded to ±14 hours), plus any
+        // boundary transition needed by the shared 1C day resolver.
+        const startEnvelope = new Date(Date.parse(`${dateRange.startDate}T00:00:00.000Z`) - 14 * 60 * 60 * 1000);
+        const endEnvelope = new Date(Date.parse(`${dateRange.endDate}T00:00:00.000Z`) + 38 * 60 * 60 * 1000);
+        assignmentQuery = assignmentQuery.lte('assigned_at', endEnvelope.toISOString())
+          .or(`ended_at.is.null,ended_at.gte.${startEnvelope.toISOString()}`);
+      }
+      const assignmentsResult = await assignmentQuery.order('assigned_at', { ascending: true });
       if (assignmentsResult.error) return { data: null, error: assignmentsResult.error };
       const versionIds = [...new Set((assignmentsResult.data || []).map((assignment: any) => assignment.nutrition_plan_version_id))] as string[];
       const versionsResult = versionIds.length

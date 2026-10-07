@@ -3,6 +3,7 @@ import { NutritionLogEvent, NutritionLogEventItem, TrainerNutritionLogEvent } fr
 import { supabaseDb } from '../../lib/supabase';
 import { nutritionDeclarationLabel } from '../../lib/nutritionLogModel.mjs';
 import { formatQuantityDifference, reconstructNutritionDay } from '../../lib/nutritionPlannedLoggedModel';
+import { deriveNutritionPeriodAnalysis, nutritionDateRange, type NutritionPeriodAnalysis } from '../../lib/nutritionDerivedAnalysis';
 import type { NutritionAssignmentContext } from '../../types';
 
 interface HistoryData {
@@ -33,6 +34,30 @@ export const TrainerNutritionLogHistory: React.FC<{ clientId: string }> = ({ cli
   const [dateQuery, setDateQuery] = useState('');
   const [selectedDay, setSelectedDay] = useState<HistoryData & { date: string } | null>(null);
   const [dayStatus, setDayStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [period, setPeriod] = useState<{ status: 'loading' | 'error' | 'loaded'; analysis?: NutritionPeriodAnalysis }>({ status: 'loading' });
+
+  useEffect(() => {
+    let current = true;
+    const endDate = new Date().toISOString().slice(0, 10);
+    const start = new Date(`${endDate}T00:00:00.000Z`);
+    start.setUTCDate(start.getUTCDate() - 6);
+    const startDate = start.toISOString().slice(0, 10);
+    setPeriod({ status: 'loading' });
+    supabaseDb.getTrainerNutritionLogHistory(clientId, 100, undefined, { startDate, endDate }).then(result => {
+      if (!current) return;
+      if (result.error || !result.data) { setPeriod({ status: 'error' }); return; }
+      const days = nutritionDateRange(startDate, endDate).map(nutritionDate => reconstructNutritionDay({
+        nutritionDate,
+        assignments: result.data!.assignments,
+        events: result.data!.events,
+        // The range adapter loads every assignment that could overlap this
+        // window; an empty overlap is therefore a known no-assignment date.
+        historical: false,
+      }));
+      setPeriod({ status: 'loaded', analysis: deriveNutritionPeriodAnalysis({ startDate, endDate, days }) });
+    });
+    return () => { current = false; };
+  }, [clientId]);
 
   useEffect(() => {
     let current = true;
@@ -70,6 +95,25 @@ export const TrainerNutritionLogHistory: React.FC<{ clientId: string }> = ({ cli
   return <section className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5">
     <h2 className="text-base font-bold">Nutrición: pautado y declarado</h2>
     <p className="mt-1 text-xs text-[#8E8E94]">Registros declarados por el Client; no constituyen verificación objetiva de ingesta.</p>
+    <section aria-label="Resumen de registro nutricional" className="mt-4 rounded-xl border border-[#2A2A2F] bg-[#101012] p-4">
+      <h3 className="text-sm font-semibold">Últimas 7 fechas nutricionales</h3>
+      {period.status === 'loading' && <p role="status" className="mt-2 text-xs text-[#8E8E94]">Calculando resumen…</p>}
+      {period.status === 'error' && <p role="alert" className="mt-2 text-xs text-red-300">No se pudo cargar el resumen de registro.</p>}
+      {period.status === 'loaded' && period.analysis && <>
+        <p className="mt-1 text-[10px] text-[#8E8E94]">{period.analysis.startDate} – {period.analysis.endDate}</p>
+        {period.analysis.completeness === 'PARTIAL' && <p className="mt-2 text-xs text-amber-200">Datos parciales · contexto histórico no disponible en {period.analysis.unavailableContextDates.length} día(s).</p>}
+        {period.analysis.completeness === 'INSUFFICIENT_DATA' && <p className="mt-2 text-xs text-[#8E8E94]">Datos insuficientes para resumir comidas pautadas en este período.</p>}
+        {period.analysis.counts.reconstructablePrescribedMealSlots > 0 ? <ul className="mt-2 grid gap-1 text-xs text-[#C2C2C7] sm:grid-cols-2">
+          <li>{period.analysis.counts.explicitDeclarations} de {period.analysis.counts.reconstructablePrescribedMealSlots} comidas con declaración</li>
+          <li>{period.analysis.counts.unloggedPrescribedMealSlots} comidas sin registrar</li>
+          <li>{period.analysis.counts.asPlanned} declaradas según el plan</li>
+          <li>{period.analysis.counts.modified} modificaciones declaradas</li>
+          <li>{period.analysis.counts.skipped} no realizadas — declarado por el cliente</li>
+          {period.analysis.counts.effectiveExtras > 0 && <li>{period.analysis.counts.effectiveExtras} extras registrados</li>}
+        </ul> : period.analysis.counts.effectiveExtras > 0 ? <p className="mt-2 text-xs text-[#C2C2C7]">{period.analysis.counts.effectiveExtras} extras registrados</p> : null}
+        {period.analysis.completeness === 'PARTIAL' && <p className="mt-2 text-[10px] text-[#8E8E94]">Los recuentos reflejan solo las fechas y comidas con datos disponibles.</p>}
+      </>}
+    </section>
     <form onSubmit={event => void loadSelectedDay(event)} className="mt-3 flex flex-wrap items-end gap-2">
       <label className="text-xs text-[#8E8E94]">Consultar fecha nutricional
         <input type="date" value={dateQuery} onChange={event => setDateQuery(event.target.value)} className="mt-1 block rounded-lg border border-[#34343A] bg-[#101012] px-2 py-1.5 text-xs text-[#F5F4F0]" />

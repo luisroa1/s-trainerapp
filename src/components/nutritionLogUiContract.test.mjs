@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const client = await readFile(new URL('./client/ClientNutrition.tsx', import.meta.url), 'utf8');
 const trainer = await readFile(new URL('./trainer/TrainerNutritionLogHistory.tsx', import.meta.url), 'utf8');
+const analysis = await readFile(new URL('../lib/nutritionDerivedAnalysis.ts', import.meta.url), 'utf8');
 
 test('Client UI exposes only explicit declaration actions and explains self-report semantics', () => {
   assert.match(client, /Hecho según el plan/);
@@ -31,4 +32,14 @@ test('Trainer UI reads canonical declarations and distinguishes correction/void 
 test('Client and Trainer both consume the single shared Planned-vs-Logged reconstruction', () => {
   assert.match(client, /reconstructNutritionDay/);
   assert.match(trainer, /reconstructNutritionDay/);
+});
+
+test('Trainer summary labels evidence completeness neutrally and avoids adherence or zero-percent claims', () => {
+  assert.match(trainer, /deriveNutritionPeriodAnalysis/);
+  assert.match(trainer, /Datos parciales/);
+  assert.match(trainer, /Datos insuficientes/);
+  assert.match(trainer, /de \{period\.analysis\.counts\.reconstructablePrescribedMealSlots\} comidas con declaración/);
+  assert.doesNotMatch(trainer, /Adherencia|Cumplimiento parcial|%/i);
+  assert.match(analysis, /HISTORICAL_CONTEXT_UNAVAILABLE/);
+  assert.doesNotMatch(analysis, /adherence|adherencia|completed|kcalToday|localStorage|requestLedger|nutrients/i);
 });

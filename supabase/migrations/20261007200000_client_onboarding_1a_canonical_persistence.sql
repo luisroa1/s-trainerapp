@@ -1,6 +1,35 @@
 -- Client Onboarding 1A: canonical profile/intake persistence and access boundaries.
 -- Legacy clients.data and its columns are intentionally preserved and untouched.
 
+-- Fail early when applied to a reconstructed schema whose identity types drift
+-- from production. Ownership comparisons and FK contracts below rely on these types.
+DO $identifier_contract$
+DECLARE
+  v_actual text;
+BEGIN
+  SELECT data_type INTO v_actual FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='clients' AND column_name='id';
+  IF v_actual IS DISTINCT FROM 'text' THEN
+    RAISE EXCEPTION 'Client onboarding requires clients.id text; found %', coalesce(v_actual,'missing');
+  END IF;
+  SELECT data_type INTO v_actual FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='clients' AND column_name='user_id';
+  IF v_actual IS DISTINCT FROM 'uuid' THEN
+    RAISE EXCEPTION 'Client onboarding requires clients.user_id uuid; found %', coalesce(v_actual,'missing');
+  END IF;
+  SELECT data_type INTO v_actual FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='clients' AND column_name='trainer_id';
+  IF v_actual IS DISTINCT FROM 'uuid' THEN
+    RAISE EXCEPTION 'Client onboarding requires clients.trainer_id uuid; found %', coalesce(v_actual,'missing');
+  END IF;
+  SELECT data_type INTO v_actual FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='profiles' AND column_name='id';
+  IF v_actual IS DISTINCT FROM 'uuid' THEN
+    RAISE EXCEPTION 'Client onboarding requires profiles.id uuid; found %', coalesce(v_actual,'missing');
+  END IF;
+END;
+$identifier_contract$;
+
 CREATE OR REPLACE FUNCTION private.text_array_has_no_duplicates(p_values text[])
 RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
   SELECT COALESCE(cardinality(p_values), 0) = COALESCE((
@@ -412,7 +441,7 @@ $policies$;
 CREATE POLICY client_profile_select ON public.client_profile FOR SELECT TO authenticated
   USING (public.is_account_enabled() AND (
     EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_profile.client_id)
-    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id::text WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_profile.client_id)
+    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_profile.client_id)
   ));
 CREATE POLICY client_profile_client_insert ON public.client_profile FOR INSERT TO authenticated
   WITH CHECK (public.is_account_enabled() AND EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_profile.client_id));
@@ -423,7 +452,7 @@ CREATE POLICY client_profile_client_update ON public.client_profile FOR UPDATE T
 CREATE POLICY client_training_context_select ON public.client_training_context FOR SELECT TO authenticated
   USING (public.is_account_enabled() AND (
     EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_training_context.client_id)
-    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id::text WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_training_context.client_id)
+    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_training_context.client_id)
   ));
 CREATE POLICY client_training_context_client_insert ON public.client_training_context FOR INSERT TO authenticated
   WITH CHECK (public.is_account_enabled() AND EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_training_context.client_id));
@@ -434,7 +463,7 @@ CREATE POLICY client_training_context_client_update ON public.client_training_co
 CREATE POLICY client_weight_records_select ON public.client_weight_records FOR SELECT TO authenticated
   USING (public.is_account_enabled() AND (
     EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_weight_records.client_id)
-    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id::text WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_weight_records.client_id)
+    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_weight_records.client_id)
   ));
 CREATE POLICY client_weight_records_client_insert ON public.client_weight_records FOR INSERT TO authenticated
   WITH CHECK (public.is_account_enabled() AND recorded_by=(SELECT auth.uid()) AND EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_weight_records.client_id));
@@ -442,13 +471,13 @@ CREATE POLICY client_weight_records_client_insert ON public.client_weight_record
 CREATE POLICY client_goal_history_select ON public.client_goal_history FOR SELECT TO authenticated
   USING (public.is_account_enabled() AND (
     EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_goal_history.client_id)
-    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id::text WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_goal_history.client_id)
+    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_goal_history.client_id)
   ));
 
 CREATE POLICY client_health_declarations_select ON public.client_health_declarations FOR SELECT TO authenticated
   USING (public.is_account_enabled() AND (
     EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_health_declarations.client_id)
-    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id::text WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_health_declarations.client_id)
+    OR EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.trainer_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='trainer' AND c.id=client_health_declarations.client_id)
   ));
 CREATE POLICY client_health_declarations_client_insert ON public.client_health_declarations FOR INSERT TO authenticated
   WITH CHECK (public.is_account_enabled() AND recorded_by=(SELECT auth.uid()) AND EXISTS (SELECT 1 FROM public.profiles p JOIN public.clients c ON c.user_id=p.id WHERE p.id=(SELECT auth.uid()) AND p.role='client' AND c.id=client_health_declarations.client_id));

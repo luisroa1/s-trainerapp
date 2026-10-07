@@ -1,8 +1,16 @@
 -- Uses existing enabled isolated identities; all test rows are rolled back.
 BEGIN;
+-- Prevent the previous isolated text/UUID schema drift from yielding a false PASS.
+DO $identifier_contract$ DECLARE v_type text; BEGIN
+  SELECT data_type INTO v_type FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='clients' AND column_name='trainer_id';
+  IF v_type IS DISTINCT FROM 'uuid' THEN
+    RAISE EXCEPTION 'Test requires production-compatible clients.trainer_id uuid; found %', coalesce(v_type,'missing');
+  END IF;
+END $identifier_contract$;
 SELECT set_config('test.onb_trainer_a', (
   SELECT p.id::text FROM public.profiles p JOIN public.account_access aa ON aa.user_id=p.id AND aa.state='enabled'
-  WHERE p.role='trainer' AND EXISTS (SELECT 1 FROM public.clients c WHERE c.trainer_id=p.id::text AND c.user_id IS NOT NULL)
+  WHERE p.role='trainer' AND EXISTS (SELECT 1 FROM public.clients c WHERE c.trainer_id=p.id AND c.user_id IS NOT NULL)
   ORDER BY p.id LIMIT 1), true);
 SELECT set_config('test.onb_trainer_b', (
   SELECT p.id::text FROM public.profiles p JOIN public.account_access aa ON aa.user_id=p.id AND aa.state='enabled'

@@ -96,11 +96,11 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-[#E8A0C4]">
-                Fase menstrual — día {activeClient.menstrualTracking.day || 3}
+                Fase menstrual — día {activeClient.menstrualTracking.day ?? 'Sin dato'}
               </span>
             </div>
             <p className="text-[11px] text-[#8E8E94] mt-0.5 leading-snug">
-              {activeClient.menstrualTracking.advice || 'Normal si hoy rindes algo menos. Baja intensidad si lo necesitas.'}
+              {activeClient.menstrualTracking.advice || 'Sin información registrada.'}
             </p>
           </div>
         </div>
@@ -185,7 +185,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
         <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
           <ShoeIcon className="w-5 h-5 shrink-0" style={{ color: '#5CD6FF', filter: 'drop-shadow(0 0 5px rgba(92,214,255,0.75))' }} />
           <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {activeClient.metrics.stepsToday.toLocaleString()}
+            {typeof activeClient.metrics?.stepsToday === 'number' ? activeClient.metrics.stepsToday.toLocaleString() : 'Sin datos'}
           </span>
           <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
             Pasos
@@ -196,7 +196,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
         <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
           <Flame className="w-5 h-5 shrink-0" style={{ color: '#FF6B4A', filter: 'drop-shadow(0 0 5px rgba(255,107,74,0.75))' }} />
           <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {activeClient.metrics.kcalToday.toLocaleString()}
+            {typeof activeClient.metrics?.kcalToday === 'number' ? activeClient.metrics.kcalToday.toLocaleString() : 'Sin datos'}
           </span>
           <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
             Kcal
@@ -210,7 +210,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
         >
           <Salad className="w-5 h-5 shrink-0" style={{ color: '#5CFFC4', filter: 'drop-shadow(0 0 5px rgba(92,255,196,0.75))' }} />
           <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {activeClient.metrics.kcalToday.toLocaleString()}
+            {typeof activeClient.metrics?.kcalToday === 'number' ? activeClient.metrics.kcalToday.toLocaleString() : 'Sin datos'}
           </span>
           <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
             Nutrición
@@ -221,7 +221,7 @@ export const ClientHome: React.FC<ClientHomeProps> = ({ onStartWorkout, onContin
         <div className="flex-1 min-w-0 flex flex-col items-center gap-1 p-2 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F]">
           <MoonStar className="w-5 h-5 shrink-0" style={{ color: '#B388FF', filter: 'drop-shadow(0 0 5px rgba(179,136,255,0.75))' }} />
           <span className="text-[14px] font-extrabold font-display text-[#F5F4F0] leading-tight text-center break-words w-full">
-            {activeClient.metrics.sleepHours}
+            {activeClient.metrics?.sleepHours || 'Sin datos'}
           </span>
           <span className="text-[7.5px] font-bold tracking-tight text-[#8E8E94] uppercase leading-tight break-words w-full text-center">
             Sueño

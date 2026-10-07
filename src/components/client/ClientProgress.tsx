@@ -34,7 +34,9 @@ export const ClientProgress: React.FC<ClientProgressProps> = ({
 
         <div className="mb-4">
           <span className="text-3xl font-extrabold font-display text-[#F5F4F0]">
-            {activeClient.currentWeight.toFixed(1).replace('.', ',')} kg
+            {typeof activeClient.currentWeight === 'number'
+              ? `${activeClient.currentWeight.toFixed(1).replace('.', ',')} kg`
+              : 'Sin datos'}
           </span>
         </div>
 

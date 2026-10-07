@@ -856,7 +856,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (c.id === clientId) {
         const updated = {
           ...c,
-          trainerNotes: [newNote, ...c.trainerNotes]
+          trainerNotes: [newNote, ...(c.trainerNotes ?? [])]
         };
         supabaseDb.upsertClient(updated).catch(() => {});
         return updated;
@@ -935,6 +935,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addFoodToLog = (clientId: string, foodName: string, kcal: number) => {
     setClients(prev => prev.map(c => {
       if (c.id === clientId) {
+        if (typeof c.metrics?.kcalToday !== 'number') return c;
         const updated = {
           ...c,
           metrics: {

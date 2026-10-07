@@ -161,9 +161,13 @@ export const ClientCycle: React.FC<ClientCycleProps> = ({ onBack }) => {
             <Moon className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-[#F5F4F0]">Fase {tracking.phase.toLowerCase()}</h4>
+            <h4 className="text-xs font-bold text-[#F5F4F0]">
+              {tracking.phase ? `Fase ${tracking.phase.toLowerCase()}` : 'Sin fase registrada'}
+            </h4>
             <p className="text-[10px] text-[#8E8E94]">
-              {tracking.phase === 'Menstrual' ? 'Considera bajar volumen si lo pide' : 'Energía alta para entrenar fuerza'}
+              {tracking.phase
+                ? tracking.phase === 'Menstrual' ? 'Considera bajar volumen si lo pide' : 'Energía alta para entrenar fuerza'
+                : 'Sin información registrada'}
             </p>
           </div>
         </div>

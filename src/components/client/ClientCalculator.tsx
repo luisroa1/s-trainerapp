@@ -40,7 +40,7 @@ export const ClientCalculator: React.FC<ClientCalculatorProps> = ({ onBack }) =>
       {/* Main Kcal display */}
       <div className="text-center my-4">
         <span className="text-3xl font-extrabold font-display text-[#F5F4F0]">
-          {activeClient.metrics.kcalToday.toLocaleString()}
+          {typeof activeClient.metrics?.kcalToday === 'number' ? activeClient.metrics.kcalToday.toLocaleString() : 'Sin datos'}
         </span>
         <span className="text-sm font-semibold text-[#8E8E94] ml-2">
           kcal hoy

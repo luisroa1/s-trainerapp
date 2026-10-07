@@ -91,7 +91,7 @@ export interface ClientData {
   adherencePercentage: number;
   completedWorkoutsCount: number;
   totalScheduledWorkoutsCount: number;
-  currentWeight: number;
+  currentWeight?: number;
   initialWeight: number;
   targetWeight: number;
   weightWeeklyTrend: string;
@@ -107,22 +107,22 @@ export interface ClientData {
     training: string;
     nutrition: string;
   } | null;
-  menstrualTracking: {
-    enabled: boolean;
-    sharedWithTrainer: boolean;
-    day: number;
-    phase: MenstrualPhase;
-    advice: string;
+  menstrualTracking?: {
+    enabled?: boolean;
+    sharedWithTrainer?: boolean;
+    day?: number;
+    phase?: MenstrualPhase;
+    advice?: string;
   };
-  metrics: {
-    stepsToday: number;
-    stepsGoal: number;
-    kcalToday: number;
-    kcalGoal: number;
-    sleepHours: string;
-    sleepQuality: string;
-    waterLiters: number;
-    waterGoal: number;
+  metrics?: {
+    stepsToday?: number;
+    stepsGoal?: number;
+    kcalToday?: number;
+    kcalGoal?: number;
+    sleepHours?: string;
+    sleepQuality?: string;
+    waterLiters?: number;
+    waterGoal?: number;
   };
   assignedProgramId: string;
   weeklySchedule: {
@@ -149,7 +149,7 @@ export interface ClientData {
     muscleMassKg: number;
     waterPercentage: number;
   }[];
-  trainerNotes: {
+  trainerNotes?: {
     id: string;
     date: string;
     content: string;

@@ -144,7 +144,7 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
           <div className="flex items-center gap-2">
             {activeClient.menstrualTracking?.enabled && (
               <span className="text-[10px] text-[#E8A0C4] bg-[#E8A0C4]/15 px-2 py-0.5 rounded-full font-bold">
-                Día {activeClient.menstrualTracking.day}
+                Día {activeClient.menstrualTracking.day ?? 'Sin dato'}
               </span>
             )}
             <ChevronRight className="w-4 h-4 text-[#5C5C62]" />

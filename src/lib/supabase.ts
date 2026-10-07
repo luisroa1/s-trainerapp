@@ -57,6 +57,7 @@ export const serializeClientToDb = (client: ClientData, ownerId?: string) => {
 
 export const deserializeClientFromDb = (row: any): ClientData => {
   if (row.data && typeof row.data === 'object' && row.data.name) {
+    const currentWeight = readCurrentWeight(row);
     return {
       ...row.data,
       id: row.id,
@@ -65,7 +66,7 @@ export const deserializeClientFromDb = (row: any): ClientData => {
       phone: row.phone || row.data.phone,
       objective: row.objective || row.data.objective,
       status: row.status || row.data.status,
-      currentWeight: Number(row.current_weight || row.data.currentWeight || 70),
+      ...(currentWeight !== undefined ? { currentWeight } : {}),
       adherencePercentage: Number(row.adherence_percentage || row.data.adherencePercentage || 100),
       assignedProgramId: readAssignedProgramId(row),
       trainerId: row.trainer_id || row.data.trainerId
@@ -76,6 +77,13 @@ export const deserializeClientFromDb = (row: any): ClientData => {
     trainerId: row.trainer_id || (row.data as any)?.trainerId,
     assignedProgramId: readAssignedProgramId(row)
   };
+};
+
+const readCurrentWeight = (row: any): number | undefined => {
+  const value = row.current_weight ?? row.data?.currentWeight;
+  if (value === null || value === undefined || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 };
 
 // Database Read/Write Operations with graceful fallback

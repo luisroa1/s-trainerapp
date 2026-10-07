@@ -119,7 +119,9 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
     setChatMessage('');
   };
 
-  const isFemaleWithCycle = client.sex === 'Mujer' && client.menstrualTracking?.sharedWithTrainer;
+  const sharedCyclePhase = client.sex === 'Mujer' && client.menstrualTracking?.sharedWithTrainer
+    ? client.menstrualTracking.phase
+    : undefined;
 
   return (
     <div className="p-8 max-w-[1240px] mx-auto pb-24">
@@ -154,10 +156,10 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-[#CFFF5C]" />
                 Activo
               </span>
-              {isFemaleWithCycle && (
+              {sharedCyclePhase && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#E8A0C4]/15 text-[#E8A0C4] border border-[#E8A0C4]/30">
                   <Moon className="w-3 h-3" />
-                  Fase {client.menstrualTracking.phase.toLowerCase()}
+                  Fase {sharedCyclePhase.toLowerCase()}
                 </span>
               )}
             </div>
@@ -231,11 +233,13 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
           </span>
           <div className="my-2">
             <span className="text-xl font-extrabold font-display text-[#5CD6FF]">
-              {client.currentWeight.toFixed(1).replace('.', ',')} kg
+              {typeof client.currentWeight === 'number' && Number.isFinite(client.currentWeight)
+                ? `${client.currentWeight.toFixed(1).replace('.', ',')} kg`
+                : 'Sin datos'}
             </span>
           </div>
           <span className="text-[11px] text-[#5CD6FF] font-medium">
-            ↓ 3,2 kg
+            Sin tendencia registrada
           </span>
         </div>
 
@@ -261,7 +265,9 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
           </span>
           <div className="my-2">
             <span className="text-xl font-extrabold font-display text-[#FF6B4A]">
-              {client.metrics.stepsToday.toLocaleString()}
+              {typeof client.metrics?.stepsToday === 'number'
+                ? client.metrics.stepsToday.toLocaleString()
+                : 'Sin datos'}
             </span>
           </div>
           <span className="text-[11px] text-[#8E8E94]">
@@ -276,7 +282,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
           </span>
           <div className="my-2">
             <span className="text-xl font-extrabold font-display text-[#B388FF]">
-              {client.metrics.sleepHours}
+              {client.metrics?.sleepHours || 'Sin datos'}
             </span>
           </div>
           <span className="text-[11px] text-[#8E8E94]">
@@ -291,7 +297,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
           </span>
           <div className="my-2">
             <span className="text-xl font-extrabold font-display text-[var(--accent-color,#CFFF5C)]">
-              86 %
+              Sin datos suficientes
             </span>
           </div>
           <span className="text-[11px] text-[#8E8E94]">
@@ -441,7 +447,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
 
               {/* Notes list */}
               <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
-                {client.trainerNotes.map((note) => (
+                {(client.trainerNotes ?? []).map((note) => (
                   <div key={note.id} className="p-3 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F]/60">
                     <p className="text-xs text-[#F5F4F0] leading-relaxed">
                       {note.content}

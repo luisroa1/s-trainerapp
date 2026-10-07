@@ -190,7 +190,9 @@ export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
 
                   {/* PESO */}
                   <td className="py-4 px-4 font-semibold text-[#5CD6FF]">
-                    {client.status !== 'Pendiente' ? `${client.currentWeight.toFixed(1).replace('.', ',')} kg` : '—'}
+                    {client.status !== 'Pendiente' && typeof client.currentWeight === 'number'
+                      ? `${client.currentWeight.toFixed(1).replace('.', ',')} kg`
+                      : '—'}
                   </td>
 
                   {/* CHECK-IN */}

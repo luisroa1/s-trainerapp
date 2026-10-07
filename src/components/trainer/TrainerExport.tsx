@@ -38,8 +38,8 @@ export const TrainerExport: React.FC = () => {
         adherencia_pct: c.adherencePercentage,
         peso_actual_kg: c.currentWeight,
         tendencia_semanal: c.weightWeeklyTrend,
-        pasos_hoy: c.metrics.stepsToday,
-        sueno: c.metrics.sleepHours,
+        pasos_hoy: c.metrics?.stepsToday ?? 'Sin datos',
+        sueno: c.metrics?.sleepHours ?? 'Sin datos',
         patologias: c.pathologies?.training ?? 'Sin información registrada',
         check_in: c.lastCheckIn
       })),
@@ -62,8 +62,8 @@ export const TrainerExport: React.FC = () => {
         c.status,
         c.adherencePercentage,
         c.currentWeight,
-        c.metrics.stepsToday,
-        `"${c.metrics.sleepHours}"`
+        c.metrics?.stepsToday ?? 'Sin datos',
+        `"${c.metrics?.sleepHours ?? 'Sin datos'}"`
       ]);
 
       const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');

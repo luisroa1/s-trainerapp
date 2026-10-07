@@ -11,68 +11,208 @@ import { resolveInitialSession } from '../src/lib/initialSessionResolution.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-function createHandlers(overrides = {}) {
-  const calls = [];
-  return {
-    calls,
-    handlers: {
-      onSession: session => calls.push(['session', session]),
-      onNoSession: () => calls.push(['empty']),
-      onError: error => calls.push(['error', error]),
-      onSettled: () => calls.push(['settled']),
-      ...overrides,
-    },
-  };
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
-test('initial callback session success preserves the session flow and settles loading', async () => {
+function createAuthHarness(overrides = {}) {
+  let generation = 0;
+  const state = { session: null, user: null, role: null, error: null, loading: true };
+  const getGeneration = () => generation;
+  const handlers = {
+    onSession: (session, isCurrent) => {
+      if (!isCurrent()) return;
+      state.session = session;
+      state.user = session.user;
+      state.error = null;
+    },
+    onNoSession: isCurrent => {
+      if (!isCurrent()) return;
+      state.session = null;
+      state.user = null;
+      state.role = null;
+      state.error = null;
+    },
+    onError: (error, isCurrent) => {
+      if (!isCurrent()) return;
+      state.session = null;
+      state.user = null;
+      state.role = null;
+      state.error = 'No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.';
+    },
+    onSettled: () => { state.loading = false; },
+    ...overrides,
+  };
+  const emitAuthEvent = (event, session = null) => {
+    generation += 1;
+    state.session = session;
+    state.user = session?.user ?? null;
+    state.error = null;
+    if (event === 'SIGNED_OUT') state.role = null;
+  };
+  return { state, getGeneration, emitAuthEvent, handlers };
+}
+
+test('Case A: initial success without a later Auth event keeps the valid session', async () => {
   const session = { user: { id: 'trainer-test' } };
-  const { calls, handlers } = createHandlers();
-  let loading = true;
-  handlers.onSettled = () => { loading = false; calls.push(['settled']); };
+  const harness = createAuthHarness();
 
   const result = await resolveInitialSession(
     async () => ({ data: { session }, error: null }),
-    handlers,
+    harness.getGeneration,
+    harness.handlers,
   );
 
   assert.equal(result.status, 'session');
-  assert.deepEqual(calls, [['session', session], ['settled']]);
-  assert.equal(loading, false);
+  assert.equal(harness.state.session, session);
+  assert.equal(harness.state.user.id, 'trainer-test');
+  assert.equal(harness.state.loading, false);
 });
 
-test('initial callback session rejection is handled and always ends loading', async () => {
-  const failure = new Error('private auth detail');
-  const { calls, handlers } = createHandlers();
-  let loading = true;
-  let safeUiMessage = null;
-  handlers.onError = error => {
-    calls.push(['error', error]);
-    safeUiMessage = 'No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.';
-  };
-  handlers.onSettled = () => { loading = false; calls.push(['settled']); };
-
-  const result = await resolveInitialSession(() => Promise.reject(failure), handlers);
-
-  assert.equal(result.status, 'error');
-  assert.deepEqual(calls, [['error', failure], ['settled']]);
-  assert.equal(loading, false);
-  assert.equal(safeUiMessage, 'No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.');
-  assert.equal(safeUiMessage.includes(failure.message), false);
-});
-
-test('an auth error returned by Supabase follows the same controlled rejection path', async () => {
-  const failure = new Error('session lookup failed');
-  const { calls, handlers } = createHandlers();
+test('Case B: initial no-session without a later Auth event remains unauthenticated', async () => {
+  const harness = createAuthHarness();
   const result = await resolveInitialSession(
-    async () => ({ data: { session: null }, error: failure }),
-    handlers,
+    async () => ({ data: { session: null }, error: null }),
+    harness.getGeneration,
+    harness.handlers,
+  );
+
+  assert.equal(result.status, 'empty');
+  assert.equal(harness.state.session, null);
+  assert.equal(harness.state.user, null);
+  assert.equal(harness.state.error, null);
+  assert.equal(harness.state.loading, false);
+});
+
+test('Case C: initial rejection without a later Auth event becomes controlled error and ends loading', async () => {
+  const failure = new Error('private auth detail');
+  const harness = createAuthHarness();
+  const result = await resolveInitialSession(
+    () => Promise.reject(failure),
+    harness.getGeneration,
+    harness.handlers,
   );
 
   assert.equal(result.status, 'error');
-  assert.equal(calls[0][0], 'error');
-  assert.equal(calls[0][1], failure);
-  assert.deepEqual(calls.at(-1), ['settled']);
+  assert.equal(harness.state.session, null);
+  assert.equal(harness.state.error, 'No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.');
+  assert.equal(harness.state.error.includes(failure.message), false);
+  assert.equal(harness.state.loading, false);
+});
+
+test('an Auth error returned by the initial Supabase lookup follows the controlled error path', async () => {
+  const failure = new Error('private auth detail');
+  const harness = createAuthHarness();
+  const result = await resolveInitialSession(
+    async () => ({ data: { session: null }, error: failure }),
+    harness.getGeneration,
+    harness.handlers,
+  );
+
+  assert.equal(result.status, 'error');
+  assert.equal(harness.state.session, null);
+  assert.equal(harness.state.error, 'No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.');
+  assert.equal(harness.state.error.includes(failure.message), false);
+  assert.equal(harness.state.loading, false);
+});
+
+test('Case D: a valid SIGNED_IN event wins over a late initial rejection', async () => {
+  const pending = deferred();
+  const session = { user: { id: 'auth-event-user' } };
+  const harness = createAuthHarness();
+  const initial = resolveInitialSession(() => pending.promise, harness.getGeneration, harness.handlers);
+
+  harness.emitAuthEvent('SIGNED_IN', session);
+  pending.reject(new Error('late initial failure'));
+  const result = await initial;
+
+  assert.equal(result.status, 'superseded');
+  assert.equal(harness.state.session, session);
+  assert.equal(harness.state.user.id, 'auth-event-user');
+  assert.equal(harness.state.error, null);
+  assert.equal(harness.state.loading, false);
+});
+
+test('Case E: a valid SIGNED_IN event wins over a late initial no-session result', async () => {
+  const pending = deferred();
+  const session = { user: { id: 'auth-event-user' } };
+  const harness = createAuthHarness();
+  const initial = resolveInitialSession(() => pending.promise, harness.getGeneration, harness.handlers);
+
+  harness.emitAuthEvent('SIGNED_IN', session);
+  pending.resolve({ data: { session: null }, error: null });
+  const result = await initial;
+
+  assert.equal(result.status, 'superseded');
+  assert.equal(harness.state.session, session);
+  assert.equal(harness.state.user.id, 'auth-event-user');
+  assert.equal(harness.state.error, null);
+  assert.equal(harness.state.loading, false);
+});
+
+test('Case F: a later legitimate SIGNED_OUT event clears a prior SIGNED_IN session', async () => {
+  const pending = deferred();
+  const session = { user: { id: 'auth-event-user' } };
+  const harness = createAuthHarness();
+  const initial = resolveInitialSession(() => pending.promise, harness.getGeneration, harness.handlers);
+
+  harness.emitAuthEvent('SIGNED_IN', session);
+  harness.state.role = 'client';
+  harness.emitAuthEvent('SIGNED_OUT', null);
+  pending.resolve({ data: { session: null }, error: null });
+  const result = await initial;
+
+  assert.equal(result.status, 'superseded');
+  assert.equal(harness.state.session, null);
+  assert.equal(harness.state.user, null);
+  assert.equal(harness.state.role, null);
+  assert.equal(harness.state.error, null);
+  assert.equal(harness.state.loading, false);
+});
+
+test('Case G: a later Auth session remains authoritative after initial success', async () => {
+  const sessionWork = deferred();
+  const enteredSessionHandler = deferred();
+  const initialSession = { user: { id: 'initial-user' } };
+  const newerSession = { user: { id: 'newer-auth-user' } };
+  const harness = createAuthHarness({
+    onSession: async (session, isCurrent) => {
+      if (isCurrent()) harness.state.session = session;
+      enteredSessionHandler.resolve();
+      await sessionWork.promise;
+      if (isCurrent()) harness.state.session = session;
+    },
+  });
+  const initial = resolveInitialSession(
+    async () => ({ data: { session: initialSession }, error: null }),
+    harness.getGeneration,
+    harness.handlers,
+  );
+
+  await enteredSessionHandler.promise;
+  harness.emitAuthEvent('SIGNED_IN', newerSession);
+  sessionWork.resolve();
+  const result = await initial;
+
+  assert.equal(result.status, 'superseded');
+  assert.equal(harness.state.session, newerSession);
+  assert.equal(harness.state.user.id, 'newer-auth-user');
+  assert.equal(harness.state.loading, false);
+});
+
+test('Supabase Auth event generation gates all initial-session mutation handlers', async () => {
+  const context = await readFile(path.join(projectRoot, 'src/context/AppContext.tsx'), 'utf8');
+  assert.match(context, /const authEventGeneration = useRef\(0\)/);
+  assert.match(context, /resolveInitialSession\(establishCallbackSession, \(\) => authEventGeneration\.current/);
+  assert.match(context, /const eventGeneration = \+\+authEventGeneration\.current/);
+  assert.match(context, /onNoSession: isCurrent => \{\s*if \(!isMounted \|\| !isCurrent\(\)\) return/);
+  assert.match(context, /onError: \(error, isCurrent\) => \{\s*if \(!isMounted \|\| !isCurrent\(\)\) return/);
 });
 
 test('top-level Error Boundary renders normal children and a neutral recovery fallback', async () => {
@@ -128,7 +268,7 @@ test('callback rejection has a neutral user state and reload action, not an inde
   const app = await readFile(path.join(projectRoot, 'src/App.tsx'), 'utf8');
   const context = await readFile(path.join(projectRoot, 'src/context/AppContext.tsx'), 'utf8');
   assert.match(context, /resolveInitialSession\(establishCallbackSession/);
-  assert.match(context, /onError: error =>/);
+  assert.match(context, /onError: \(error, isCurrent\) =>/);
   assert.match(context, /onSettled: \(\) =>[\s\S]*setAuthLoading\(false\)/);
   assert.match(app, /authInitializationError && !supabaseUser/);
   assert.match(app, /Recargar/);

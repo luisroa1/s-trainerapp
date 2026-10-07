@@ -163,6 +163,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [profileRoleError, setProfileRoleError] = useState<string | null>(null);
   const profileRoleRequest = useRef(0);
   const accountAccessRequest = useRef(0);
+  const authEventGeneration = useRef(0);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [authInitializationError, setAuthInitializationError] = useState<string | null>(null);
   const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus>('connecting');
@@ -236,7 +237,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [accentColor]);
 
   // Load real client for authenticated client user
-  const loadRealClientForUser = useCallback(async (userId: string): Promise<ClientData | null> => {
+  const loadRealClientForUser = useCallback(async (
+    userId: string,
+    isCurrentAuthState: () => boolean = () => true
+  ): Promise<ClientData | null> => {
     try {
       const { data, error } = await supabase
         .from('clients')
@@ -250,9 +254,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (!data) {
+        if (!isCurrentAuthState()) return null;
         setRealClient(null);
         return null;
       }
+
+      if (!isCurrentAuthState()) return null;
 
       const client = deserializeClientFromDb(data);
       if (!client.id && data.id) client.id = data.id;
@@ -280,10 +287,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load and sync from Supabase
   const refreshFromSupabase = useCallback(async (
     authenticatedUserId = supabaseUser?.id,
-    authenticatedRole = userRole
+    authenticatedRole = userRole,
+    isCurrentAuthState: () => boolean = () => true
   ) => {
     try {
       const health = await supabaseDb.testConnection();
+      if (!isCurrentAuthState()) return;
       if (!health.connected) {
         setSupabaseStatus('error');
         return;
@@ -297,6 +306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Fetch Clients
       const clientsRes = await supabaseDb.getClients();
+      if (!isCurrentAuthState()) return;
       if (clientsRes.data) {
         setClients(clientsRes.data);
         if (clientsRes.data.length > 0) {
@@ -317,6 +327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeProgramOwnerId.current = programOwnerId || null;
       if (programOwnerId) {
         const programsRes = await supabaseDb.getPrograms(programOwnerId);
+        if (!isCurrentAuthState()) return;
         setPrograms(programsRes.data || []);
       } else {
         setPrograms([]);
@@ -324,12 +335,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Fetch Nutrition
       const nutritionRes = await supabaseDb.getNutritionPlans();
+      if (!isCurrentAuthState()) return;
       if (nutritionRes.data) {
         setNutritionPlans(nutritionRes.data);
       }
 
       // Fetch Trainer Profile (filtrado por el id del usuario autenticado si existe)
       const trainerRes = await supabaseDb.getTrainerProfile(supabaseUser?.id);
+      if (!isCurrentAuthState()) return;
       if (trainerRes.data) {
         setTrainer(trainerRes.data);
       }
@@ -494,19 +507,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // 2. Get initial session after processing a callback, if present.
-    void resolveInitialSession(establishCallbackSession, {
-      onSession: async session => {
-        if (!isMounted) return;
+    void resolveInitialSession(establishCallbackSession, () => authEventGeneration.current, {
+      onSession: async (session, isCurrent) => {
+        if (!isMounted || !isCurrent()) return;
         setAuthInitializationError(null);
         setSupabaseSession(session);
         setSupabaseUser(session.user);
         try {
           const accessState = await loadAccountAccess(session.user.id);
+          if (!isMounted || !isCurrent()) return;
           const { profile, role } = accessState === 'enabled'
             ? await loadProfileRole(session.user.id)
             : { profile: null, role: null };
 
-          if (isMounted && role && profile) {
+          if (!isMounted || !isCurrent()) return;
+          if (role && profile) {
             if (role === 'trainer' || role === 'admin') {
               const isRoleAdmin = role === 'admin';
               const roleDisplay = isRoleAdmin ? 'Administrador' : 'Entrenador';
@@ -522,16 +537,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 couponCode: 'STRAINER20'
               });
             } else if (role === 'client') {
-              await loadRealClientForUser(session.user.id);
+              await loadRealClientForUser(session.user.id, isCurrent);
+              if (!isMounted || !isCurrent()) return;
             }
-            await refreshFromSupabase(session.user.id, role);
+            await refreshFromSupabase(session.user.id, role, isCurrent);
           }
         } catch (e) {
           console.warn('Error fetching initial profile:', e);
         }
       },
-      onNoSession: () => {
-        if (!isMounted) return;
+      onNoSession: isCurrent => {
+        if (!isMounted || !isCurrent()) return;
         setAuthInitializationError(null);
         profileRoleRequest.current += 1;
         accountAccessRequest.current += 1;
@@ -543,8 +559,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
       },
-      onError: error => {
-        if (!isMounted) return;
+      onError: (error, isCurrent) => {
+        if (!isMounted || !isCurrent()) return;
         console.error('Unable to establish the initial auth session:', error);
         setAuthInitializationError('No se pudo verificar tu sesión. Recarga para intentarlo de nuevo.');
         setSupabaseSession(null);
@@ -563,17 +579,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 3. Auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return;
+      const eventGeneration = ++authEventGeneration.current;
+      const isCurrentAuthEvent = () => isMounted && authEventGeneration.current === eventGeneration;
       if (session?.user) setAuthInitializationError(null);
       setSupabaseSession(session);
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
         try {
           const accessState = await loadAccountAccess(session.user.id);
+          if (!isCurrentAuthEvent()) return;
           const { profile, role } = accessState === 'enabled'
             ? await loadProfileRole(session.user.id)
             : { profile: null, role: null };
 
-          if (isMounted && role && profile) {
+          if (!isCurrentAuthEvent()) return;
+          if (role && profile) {
 
             if ((role === 'trainer' || role === 'admin') && profile) {
               const isRoleAdmin = role === 'admin';
@@ -590,7 +610,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 couponCode: 'STRAINER20'
               });
             } else if (role === 'client') {
-              await loadRealClientForUser(session.user.id);
+              await loadRealClientForUser(session.user.id, isCurrentAuthEvent);
+              if (!isCurrentAuthEvent()) return;
             }
           }
         } catch (e) {
@@ -599,7 +620,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // If client logs in, match active client by email if found
         const userEmail = session.user.email;
-        if (userEmail) {
+        if (isCurrentAuthEvent() && userEmail) {
           const matched = clients.find(c => c.email.toLowerCase() === userEmail.toLowerCase());
           if (matched) {
             setActiveClientId(matched.id);

@@ -806,11 +806,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       targetWeight: clientData.targetWeight || 72.0,
       weightWeeklyTrend: '→ 0,0 kg / semana',
       lastCheckIn: 'Hoy',
-      pathologies: clientData.pathologies || {
-        hasLimitations: false,
-        training: 'Sin limitaciones articulares.',
-        nutrition: 'Sin restricciones.'
-      },
+      ...(clientData.pathologies ? { pathologies: clientData.pathologies } : {}),
       menstrualTracking: clientData.menstrualTracking || {
         enabled: false,
         sharedWithTrainer: false,

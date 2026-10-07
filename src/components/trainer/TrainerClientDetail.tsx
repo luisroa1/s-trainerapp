@@ -5,7 +5,6 @@ import {
   Apple, 
   Dumbbell, 
   AlertTriangle, 
-  CheckCircle2, 
   Moon, 
   Plus, 
   Send 
@@ -15,6 +14,7 @@ import { useApp } from '../../context/AppContext';
 import { supabaseDb } from '../../lib/supabase';
 import type { TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
 import { formatPerformedLoad, formatPerformedMeasure, plannedPerformedRows } from '../../lib/trainerWorkoutHistory.mjs';
+import { ClientPathologiesSummary } from './ClientPathologiesSummary';
 
 interface TrainerClientDetailProps {
   client: ClientData;
@@ -210,35 +210,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
       {assignmentError && <p role="alert" className="mb-4 text-xs text-red-300">{assignmentError}</p>}
       {assignmentMessage && <p role="status" className="mb-4 text-xs text-emerald-300">{assignmentMessage}</p>}
 
-      {/* PATOLOGÍAS Y LIMITACIONES (Apartado fijo) */}
-      <div className="mb-4">
-        {client.pathologies.hasLimitations ? (
-          <div className="p-4 rounded-[16px] bg-[#16161A] border border-[#FF6B4A]/40">
-            <span className="text-[10px] font-bold tracking-widest text-[#FF6B4A] uppercase block mb-1.5 flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              PATOLOGÍAS Y LIMITACIONES
-            </span>
-            <div className="text-xs text-[#F5F4F0] space-y-1 leading-relaxed">
-              <p><b className="text-[#8E8E94]">Entrenamiento:</b> {client.pathologies.training}</p>
-              <p><b className="text-[#8E8E94]">Alimentación:</b> {client.pathologies.nutrition}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="p-3.5 rounded-[16px] bg-[#16161A] border border-[#CFFF5C]/40 flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#CFFF5C]/15 text-[#CFFF5C] flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-[#CFFF5C]">
-                Sin patologías ni limitaciones registradas
-              </h4>
-              <p className="text-[11px] text-[#8E8E94]">
-                Confirmado — sin restricciones de entrenamiento ni de alimentación
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+      <ClientPathologiesSummary pathologies={client.pathologies} />
 
       {/* Alert banner if exists */}
       {client.alert && (

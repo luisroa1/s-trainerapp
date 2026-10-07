@@ -102,11 +102,11 @@ export interface ClientData {
     message: string;
     date: string;
   };
-  pathologies: {
+  pathologies?: {
     hasLimitations: boolean;
     training: string;
     nutrition: string;
-  };
+  } | null;
   menstrualTracking: {
     enabled: boolean;
     sharedWithTrainer: boolean;

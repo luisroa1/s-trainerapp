@@ -40,7 +40,7 @@ export const TrainerExport: React.FC = () => {
         tendencia_semanal: c.weightWeeklyTrend,
         pasos_hoy: c.metrics.stepsToday,
         sueno: c.metrics.sleepHours,
-        patologias: c.pathologies.training,
+        patologias: c.pathologies?.training ?? 'Sin información registrada',
         check_in: c.lastCheckIn
       })),
       programs: programs.map(p => ({

@@ -6,14 +6,13 @@ import {
   Camera,
   Moon,
   Droplet,
-  Pill, 
   Bell, 
   HelpCircle, 
   ChevronRight 
 } from 'lucide-react';
 
 interface ClientProfileProps {
-  onNavigateSubscreen: (subscreen: 'datos' | 'medidas' | 'fotos' | 'ciclo' | 'recordatorios' | 'suplementos' | 'guia') => void;
+  onNavigateSubscreen: (subscreen: 'datos' | 'medidas' | 'fotos' | 'ciclo' | 'recordatorios' | 'guia') => void;
   onLogout: () => void;
 }
 
@@ -162,18 +161,6 @@ export const ClientProfile: React.FC<ClientProfileProps> = ({
               <span className="text-xs font-semibold text-[#F5F4F0] block">Recordatorios</span>
               <span className="text-[9.5px] text-[#8E8E94]">Hidratación · Descanso · Sueño</span>
             </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
-        </div>
-
-        {/* Suplementación */}
-        <div
-          onClick={() => onNavigateSubscreen('suplementos')}
-          className="p-3.5 rounded-[14px] bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-between cursor-pointer hover:border-[#3A3A40] transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <Pill className="w-4 h-4 text-[#8E8E94]" />
-            <span className="text-xs font-semibold text-[#F5F4F0]">Suplementación</span>
           </div>
           <ChevronRight className="w-4 h-4 text-[#5C5C62]" />
         </div>

@@ -109,9 +109,7 @@ git push -u origin main
 │       │   ├── ClientProgress.tsx
 │       │   ├── ClientMeasurements.tsx
 │       │   ├── ClientNutrition.tsx
-│       │   ├── ClientCalculator.tsx
 │       │   ├── ClientShoppingList.tsx
-│       │   ├── ClientSupplements.tsx
 │       │   ├── ClientCycle.tsx
 │       │   ├── ClientProfile.tsx
 │       │   ├── ClientDataForm.tsx
@@ -124,7 +122,6 @@ git push -u origin main
 │       │   ├── TrainerPrograms.tsx
 │       │   ├── TrainerProgramNew.tsx
 │       │   ├── TrainerProgramBuilder.tsx
-│       │   ├── TrainerNutritionNew.tsx
 │       │   ├── TrainerNutritionBuilder.tsx
 │       │   ├── TrainerInvite.tsx
 │       │   ├── TrainerExport.tsx

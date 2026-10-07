@@ -1,4 +1,4 @@
-import { ClientData, Program, NutritionPlan } from '../types';
+import { ClientData, Program } from '../types';
 
 export const INITIAL_PROGRAMS: Program[] = [
   {
@@ -159,7 +159,6 @@ export const INITIAL_CLIENTS: ClientData[] = [
     objective: 'Pérdida de grasa · fuerza',
     status: 'Activo',
     nextWorkout: 'Hoy · Pierna',
-    adherencePercentage: 89,
     completedWorkoutsCount: 16,
     totalScheduledWorkoutsCount: 18,
     currentWeight: 82.4,
@@ -188,12 +187,8 @@ export const INITIAL_CLIENTS: ClientData[] = [
     metrics: {
       stepsToday: 8432,
       stepsGoal: 9000,
-      kcalToday: 1980,
-      kcalGoal: 2200,
       sleepHours: '7h 18min',
       sleepQuality: 'Calidad buena',
-      waterLiters: 1.8,
-      waterGoal: 2.5
     },
     assignedProgramId: 'prog-1',
     weeklySchedule: [
@@ -247,7 +242,6 @@ export const INITIAL_CLIENTS: ClientData[] = [
     objective: 'Recomposición corporal',
     status: 'Activo',
     nextWorkout: 'Hoy · Espalda',
-    adherencePercentage: 73,
     completedWorkoutsCount: 11,
     totalScheduledWorkoutsCount: 15,
     currentWeight: 58.9,
@@ -276,12 +270,8 @@ export const INITIAL_CLIENTS: ClientData[] = [
     metrics: {
       stepsToday: 7150,
       stepsGoal: 8500,
-      kcalToday: 1680,
-      kcalGoal: 1850,
       sleepHours: '6h 40min',
       sleepQuality: 'Calidad regular',
-      waterLiters: 2.1,
-      waterGoal: 2.3
     },
     assignedProgramId: 'prog-4',
     weeklySchedule: [
@@ -333,7 +323,6 @@ export const INITIAL_CLIENTS: ClientData[] = [
     objective: 'Hipertrofia',
     status: 'Activo',
     nextWorkout: 'Mañana · Empuje',
-    adherencePercentage: 95,
     completedWorkoutsCount: 19,
     totalScheduledWorkoutsCount: 20,
     currentWeight: 64.1,
@@ -356,12 +345,8 @@ export const INITIAL_CLIENTS: ClientData[] = [
     metrics: {
       stepsToday: 10400,
       stepsGoal: 10000,
-      kcalToday: 2400,
-      kcalGoal: 2450,
       sleepHours: '8h 05min',
       sleepQuality: 'Óptima',
-      waterLiters: 2.8,
-      waterGoal: 2.8
     },
     assignedProgramId: 'prog-1',
     weeklySchedule: [
@@ -397,7 +382,6 @@ export const INITIAL_CLIENTS: ClientData[] = [
     objective: 'Fuerza',
     status: 'Pausado',
     nextWorkout: '—',
-    adherencePercentage: 61,
     completedWorkoutsCount: 11,
     totalScheduledWorkoutsCount: 18,
     currentWeight: 90.2,
@@ -420,12 +404,8 @@ export const INITIAL_CLIENTS: ClientData[] = [
     metrics: {
       stepsToday: 4200,
       stepsGoal: 8000,
-      kcalToday: 2100,
-      kcalGoal: 2600,
       sleepHours: '6h 10min',
       sleepQuality: 'Interrumpido',
-      waterLiters: 1.5,
-      waterGoal: 3.0
     },
     assignedProgramId: 'prog-3',
     weeklySchedule: [
@@ -460,7 +440,6 @@ export const INITIAL_CLIENTS: ClientData[] = [
     objective: 'Pérdida de grasa',
     status: 'Pendiente',
     nextWorkout: 'Sin activar',
-    adherencePercentage: 0,
     completedWorkoutsCount: 0,
     totalScheduledWorkoutsCount: 0,
     currentWeight: 88.0,
@@ -480,7 +459,7 @@ export const INITIAL_CLIENTS: ClientData[] = [
       nutrition: 'Pendiente de valorar preferencias.'
     },
     menstrualTracking: { enabled: false, sharedWithTrainer: false, day: 0, phase: 'Folicular', advice: '' },
-    metrics: { stepsToday: 0, stepsGoal: 8000, kcalToday: 0, kcalGoal: 2000, sleepHours: '—', sleepQuality: '—', waterLiters: 0, waterGoal: 2.5 },
+    metrics: { stepsToday: 0, stepsGoal: 8000, sleepHours: '—', sleepQuality: '—' },
     assignedProgramId: 'prog-2',
     weeklySchedule: [
       { day: 'L', status: 'rest' },
@@ -498,101 +477,4 @@ export const INITIAL_CLIENTS: ClientData[] = [
       { id: 'tn-7', date: 'Ayer', content: 'Invitación remitida. En espera de su activación en la app.' }
     ]
   }
-];
-
-export const INITIAL_NUTRITION_PLAN: NutritionPlan = {
-  id: 'nut-juan',
-  clientId: 'cli-juan',
-  clientName: 'Juan Rodríguez',
-  objective: 'Pérdida de grasa',
-  dietType: 'Omnívora',
-  targetKcal: 2200,
-  macros: {
-    protein: 160,
-    carbs: 230,
-    fat: 70,
-    fiber: 30,
-    water: 2.5
-  },
-  meals: [
-    {
-      id: 'm-1',
-      name: 'Desayuno',
-      completed: true,
-      ingredients: ['Huevos', 'Avena', 'Plátano', 'Almendras'],
-      kcalApprox: 540
-    },
-    {
-      id: 'm-2',
-      name: 'Comida',
-      completed: true,
-      ingredients: ['Pechuga de pollo', 'Arroz integral', 'Espinacas', 'Aceite de oliva'],
-      kcalApprox: 750
-    },
-    {
-      id: 'm-3',
-      name: 'Cena',
-      completed: false,
-      ingredients: ['Atún en conserva', 'Garbanzos', 'Tomate', 'Aguacate'],
-      kcalApprox: 610
-    },
-    {
-      id: 'm-4',
-      name: 'Snack',
-      completed: false,
-      ingredients: ['Yogur natural', 'Queso fresco'],
-      kcalApprox: 300
-    }
-  ],
-  shoppingList: [
-    {
-      category: 'PROTEÍNAS',
-      items: [
-        { name: 'Pechuga de pollo', checked: true },
-        { name: 'Huevos', checked: true },
-        { name: 'Atún en conserva', checked: false },
-        { name: 'Queso fresco', checked: false },
-      ]
-    },
-    {
-      category: 'VERDURA Y FRUTA',
-      items: [
-        { name: 'Aguacate', checked: true },
-        { name: 'Espinacas', checked: false },
-        { name: 'Tomate', checked: false },
-        { name: 'Plátano', checked: true },
-      ]
-    },
-    {
-      category: 'CEREALES Y LEGUMBRES',
-      items: [
-        { name: 'Arroz integral', checked: true },
-        { name: 'Avena', checked: false },
-        { name: 'Garbanzos', checked: false },
-      ]
-    },
-    {
-      category: 'GRASAS SALUDABLES',
-      items: [
-        { name: 'Aceite de oliva', checked: true },
-        { name: 'Almendras', checked: false },
-      ]
-    },
-    {
-      category: 'LÁCTEOS',
-      items: [
-        { name: 'Yogur natural', checked: false },
-      ]
-    }
-  ]
-};
-
-export const FREQUENT_FOODS = [
-  { id: 'f-1', name: 'Pechuga de pollo (150 g)', kcal: 165, protein: 31, carbs: 0, fat: 3.6 },
-  { id: 'f-2', name: 'Arroz blanco (100 g cocido)', kcal: 130, protein: 2.7, carbs: 28, fat: 0.3 },
-  { id: 'f-3', name: 'Huevo (unidad L)', kcal: 78, protein: 6.3, carbs: 0.4, fat: 5.3 },
-  { id: 'f-4', name: 'Yogur natural (125 g)', kcal: 100, protein: 4.5, carbs: 6, fat: 3.8 },
-  { id: 'f-5', name: 'Plátano (mediano 100 g)', kcal: 105, protein: 1.3, carbs: 27, fat: 0.3 },
-  { id: 'f-6', name: 'Aguacate (½ unidad 80 g)', kcal: 120, protein: 1.5, carbs: 3, fat: 11 },
-  { id: 'f-7', name: 'Almendras (20 g)', kcal: 116, protein: 4.2, carbs: 4.3, fat: 10 },
 ];

@@ -144,6 +144,7 @@ export const ClientNutrition: React.FC = () => {
           {snapshot.notes && <p className="mt-3 text-xs text-[#8E8E94]">{snapshot.notes}</p>}
         </section>
         <section className="space-y-4">
+          {sortedMeals.length === 0 && <p className="rounded-2xl border border-[#2A2A2F] bg-[#16161A] p-5 text-sm text-[#8E8E94]">Tu plan nutricional está activo, pero todavía no contiene comidas pautadas.</p>}
           {sortedMeals.map(reconstructed => {
             const meal = reconstructed.meal!;
             const declaration = reconstructed?.declaration || null;

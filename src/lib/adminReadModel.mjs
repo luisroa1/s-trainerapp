@@ -1,4 +1,4 @@
-const ADMIN_SECTIONS = new Set(['home', 'trainers', 'clients', 'programs', 'nutrition', 'audit', 'settings']);
+const ADMIN_SECTIONS = new Set(['home', 'trainers', 'clients', 'programs', 'audit', 'settings']);
 
 export function canEnterAdmin(role) {
   return role === 'admin';
@@ -12,7 +12,7 @@ export function getAdminNavigationTarget(section, id = null) {
   return { section: 'home', selectedId: null };
 }
 
-export function buildAdminReadModel({ profiles = [], trainerProfiles = [], clients = [], programs = [], nutritionPlans = [] }) {
+export function buildAdminReadModel({ profiles = [], trainerProfiles = [], clients = [], programs = [] }) {
   const trainerPresentation = new Map(trainerProfiles.map(profile => [String(profile.id), profile]));
   const programById = new Map(programs.map(program => [String(program.id), program]));
   const clientById = new Map(clients.map(client => [String(client.id), client]));
@@ -47,13 +47,7 @@ export function buildAdminReadModel({ profiles = [], trainerProfiles = [], clien
     clients: mappedClients.filter(client => String(client.assigned_program_id) === String(program.id)),
   })).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es'));
 
-  const mappedNutritionPlans = nutritionPlans.map(plan => ({
-    ...plan,
-    client: clientById.get(String(plan.client_id)) || null,
-    trainer: trainers.find(trainer => trainer.id === String(plan.trainer_id)) || null,
-  }));
-
-  return { trainers, clients: mappedClients, programs: mappedPrograms, nutritionPlans: mappedNutritionPlans };
+  return { trainers, clients: mappedClients, programs: mappedPrograms };
 }
 
 export function searchAdminDirectory(model, value) {
@@ -71,7 +65,6 @@ export async function fetchAdminReadModel(supabase) {
     ['trainer_profiles', supabase.from('trainer_profiles').select('id,name,initials,avatar_url')],
     ['clients', supabase.from('clients').select('id,user_id,trainer_id,name,email,phone,status,objective,assigned_program_id,current_weight,created_at,updated_at')],
     ['programs', supabase.from('programs').select('id,trainer_id,name,type,level,duration_weeks,days_per_week,created_at,updated_at')],
-    ['nutrition_plans', supabase.from('nutrition_plans').select('id,client_id,trainer_id,created_at,updated_at')],
   ];
   const results = await Promise.all(requests.map(async ([name, request]) => ({ name, ...(await request) })));
   const failed = results.find(result => result.error);
@@ -82,6 +75,5 @@ export async function fetchAdminReadModel(supabase) {
     trainerProfiles: rows.trainer_profiles,
     clients: rows.clients,
     programs: rows.programs,
-    nutritionPlans: rows.nutrition_plans,
   });
 }

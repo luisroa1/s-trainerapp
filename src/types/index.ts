@@ -88,6 +88,7 @@ export interface ClientData {
   objective: string;
   status: ClientStatus;
   nextWorkout?: string;
+  /** @deprecated Legacy persisted field only. Never use as Nutrition authority or analysis. */
   adherencePercentage?: number;
   completedWorkoutsCount?: number;
   totalScheduledWorkoutsCount?: number;
@@ -114,14 +115,19 @@ export interface ClientData {
     phase?: MenstrualPhase;
     advice?: string;
   };
+  /** @deprecated Preserved legacy client JSON only; canonical Nutrition uses plan snapshots and log events. */
   metrics?: {
     stepsToday?: number;
     stepsGoal?: number;
+    /** @deprecated Legacy persisted metric only; not canonical Nutrition Logged data. */
     kcalToday?: number;
+    /** @deprecated Legacy persisted goal only; not canonical Nutrition Planned data. */
     kcalGoal?: number;
     sleepHours?: string;
     sleepQuality?: string;
+    /** @deprecated Legacy persisted hydration values only; not logged intake. */
     waterLiters?: number;
+    /** @deprecated Legacy persisted hydration target only; not canonical Nutrition Planned data. */
     waterGoal?: number;
   };
   assignedProgramId: string;
@@ -153,36 +159,6 @@ export interface ClientData {
     id: string;
     date: string;
     content: string;
-  }[];
-}
-
-export interface NutritionPlan {
-  id: string;
-  clientId: string;
-  clientName: string;
-  objective: string;
-  dietType: 'Omnívora' | 'Vegetariana' | 'Vegana';
-  targetKcal: number;
-  macros: {
-    protein: number; // in grams
-    carbs: number;
-    fat: number;
-    fiber: number;
-    water: number;
-  };
-  meals: {
-    id: string;
-    name: string; // Desayuno, Comida, Cena, Snack
-    completed: boolean;
-    ingredients: string[];
-    kcalApprox: number;
-  }[];
-  shoppingList: {
-    category: string;
-    items: {
-      name: string;
-      checked: boolean;
-    }[];
   }[];
 }
 

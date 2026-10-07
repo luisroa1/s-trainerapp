@@ -23,9 +23,6 @@ const seed = {
   programs: [
     { id: 'p-1', trainer_id: 'trainer-1', name: 'Strength', days_per_week: 3 },
   ],
-  nutritionPlans: [
-    { id: 'n-1', client_id: 'c-1', trainer_id: 'trainer-1', data: { objective: 'Maintenance' } },
-  ],
 };
 
 test('Admin read model trusts profiles.role and groups persisted ownership relationships', () => {
@@ -37,8 +34,7 @@ test('Admin read model trusts profiles.role and groups persisted ownership relat
   assert.equal(model.clients[0].trainer.id, 'trainer-1');
   assert.equal(model.clients[0].program.id, 'p-1');
   assert.equal(model.programs[0].clients[0].id, 'c-1');
-  assert.equal(model.nutritionPlans[0].client.id, 'c-1');
-  assert.equal(model.nutritionPlans[0].trainer.id, 'trainer-1');
+  assert.equal('nutritionPlans' in model, false);
 });
 
 test('trainer_profiles presentation rows never create Admin Trainer identities', () => {
@@ -73,7 +69,6 @@ test('Admin read failure rejects instead of falling back to cached or mock data'
     trainer_profiles: { data: seed.trainerProfiles, error: null },
     clients: { data: null, error: new Error('RLS denied') },
     programs: { data: seed.programs, error: null },
-    nutrition_plans: { data: seed.nutritionPlans, error: null },
   };
   const fakeSupabase = {
     from(table) {
@@ -86,4 +81,27 @@ test('Admin read failure rejects instead of falling back to cached or mock data'
     },
   };
   await assert.rejects(fetchAdminReadModel(fakeSupabase), /No se pudieron cargar los datos de clients/);
+});
+
+test('Admin read model never queries legacy nutrition_plans', async () => {
+  const queriedTables = [];
+  const fakeSupabase = {
+    from(table) {
+      queriedTables.push(table);
+      const query = {
+        select() { return query; },
+        eq() { return query; },
+        then(resolve, reject) {
+          const rows = table === 'profiles' ? seed.profiles
+            : table === 'trainer_profiles' ? seed.trainerProfiles
+              : table === 'clients' ? seed.clients : seed.programs;
+          return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
+        },
+      };
+      return query;
+    },
+  };
+  const model = await fetchAdminReadModel(fakeSupabase);
+  assert.deepEqual(queriedTables.sort(), ['clients', 'profiles', 'programs', 'trainer_profiles']);
+  assert.equal('nutritionPlans' in model, false);
 });

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ClientData, Program } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { supabase, IS_READ_ONLY_PREVIEW } from '../../lib/supabase';
 import { TrainerDashboard } from './TrainerDashboard';
 import { TrainerClientDetail } from './TrainerClientDetail';
 import { TrainerPrograms } from './TrainerPrograms';
@@ -83,6 +83,7 @@ export const TrainerApp: React.FC = () => {
   };
 
   const handleSaveTrainerProfile = async () => {
+    if (IS_READ_ONLY_PREVIEW) return;
     updateTrainer({
       name: trainerName,
       role: trainerRole,
@@ -251,13 +252,14 @@ export const TrainerApp: React.FC = () => {
         <div className="pt-4 border-t border-[#2A2A2F] flex flex-col gap-2">
           <div 
             onClick={() => {
+              if (IS_READ_ONLY_PREVIEW) return;
               setTrainerName(trainer.name);
               setTrainerRole(trainer.role);
               setTrainerAvatar(trainer.avatarUrl || '');
               setShowTrainerModal(true);
             }}
-            className="flex items-center justify-between cursor-pointer group hover:bg-[#1B1B1F]/50 p-2 rounded-xl transition-colors"
-            title="Editar perfil y foto del entrenador"
+            className={`flex items-center justify-between ${IS_READ_ONLY_PREVIEW ? 'cursor-default' : 'cursor-pointer hover:bg-[#1B1B1F]/50'} group p-2 rounded-xl transition-colors`}
+            title={IS_READ_ONLY_PREVIEW ? 'Perfil de solo lectura' : 'Editar perfil y foto del entrenador'}
           >
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="relative shrink-0">
@@ -289,9 +291,7 @@ export const TrainerApp: React.FC = () => {
                 </span>
               </div>
             </div>
-            <span className="text-[10px] text-[var(--accent-color,#CFFF5C)] opacity-0 group-hover:opacity-100 transition-opacity font-semibold shrink-0">
-              Editar
-            </span>
+            {!IS_READ_ONLY_PREVIEW && <span className="text-[10px] text-[var(--accent-color,#CFFF5C)] opacity-0 group-hover:opacity-100 transition-opacity font-semibold shrink-0">Editar</span>}
           </div>
 
           {/* Visible Cerrar sesión button */}
@@ -475,10 +475,16 @@ export const TrainerApp: React.FC = () => {
           </div>
         </header>
 
+        {IS_READ_ONLY_PREVIEW && (
+          <div role="status" className="sticky top-14 z-10 border-b border-cyan-400/40 bg-[#0A2433] px-6 py-2 text-center text-xs font-semibold text-cyan-100">
+            Vista previa de solo lectura · datos reales de producción · los cambios no se guardan
+          </div>
+        )}
+
         {activeSection === 'dashboard' && (
           <TrainerDashboard
             onSelectClient={handleSelectClient}
-            onOpenInvite={() => setActiveSection('invite')}
+            onOpenInvite={() => { if (!IS_READ_ONLY_PREVIEW) setActiveSection('invite'); }}
           />
         )}
 

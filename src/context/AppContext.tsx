@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { ActiveProgramAssignment, ActiveNutritionPlan, ClientData, Program, NutritionPlanDraftRecord, NutritionPlanSnapshot, AccentColor, TrainerProfile, UserRole } from '../types';
-import { supabase, supabaseDb, deserializeClientFromDb } from '../lib/supabase';
+import { supabase, supabaseDb, deserializeClientFromDb, IS_READ_ONLY_PREVIEW } from '../lib/supabase';
 import { resolveProfileRole } from '../lib/profileRole.mjs';
 import { resolveAccountAccess } from '../lib/accountAccessState.mjs';
 import { resolveInitialSession } from '../lib/initialSessionResolution.mjs';
+import { assertPreviewWritesAllowed } from '../lib/supabaseReadOnlyGuard.mjs';
 
 const INITIAL_TRAINER: TrainerProfile = {
   id: '',
@@ -70,7 +71,11 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const assertWritable = (operation: string) => {
+    assertPreviewWritesAllowed(IS_READ_ONLY_PREVIEW, operation);
+  };
   const [appName, setAppNameState] = useState<string>(() => {
+    if (IS_READ_ONLY_PREVIEW) return 'S-Trainer app — Plataforma de Entrenamiento';
     const saved = localStorage.getItem('strainer_app_name');
     if (!saved || saved.toLowerCase().includes('roafit') || saved === 'S-Trainer app') {
       return 'S-Trainer app — Plataforma de Entrenamiento';
@@ -79,6 +84,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [trainer, setTrainer] = useState<TrainerProfile>(() => {
+    if (IS_READ_ONLY_PREVIEW) return INITIAL_TRAINER;
     const saved = localStorage.getItem('strainer_trainer');
     if (saved) {
       try {
@@ -96,6 +102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [clients, setClients] = useState<ClientData[]>(() => {
+    if (IS_READ_ONLY_PREVIEW) return [];
     const saved = localStorage.getItem('strainer_clients');
     if (!saved) return [];
     try {
@@ -119,6 +126,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeAssignmentRequest = useRef(0);
 
   const [programs, setPrograms] = useState<Program[]>(() => {
+    if (IS_READ_ONLY_PREVIEW) return [];
     const saved = localStorage.getItem('strainer_programs');
     if (!saved) return [];
     try {
@@ -139,7 +147,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [nutritionPlanStatus, setNutritionPlanStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [nutritionPlanError, setNutritionPlanError] = useState<string | null>(null);
 
-  const [accentColor, setAccentColor] = useState<AccentColor>(() => {
+  const [accentColor, setAccentColorState] = useState<AccentColor>(() => {
+    if (IS_READ_ONLY_PREVIEW) return '#CFFF5C';
     const saved = localStorage.getItem('strainer_accent') || localStorage.getItem('roafit_accent');
     return (saved as AccentColor) || '#CFFF5C';
   });
@@ -164,8 +173,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isAdmin = userRole === 'admin';
 
   const setAppName = (name: string) => {
+    assertWritable('Cambiar el nombre de la aplicación');
     setAppNameState(name);
     localStorage.setItem('strainer_app_name', name);
+  };
+
+  const setAccentColor = (color: AccentColor) => {
+    assertWritable('Cambiar el tema de la aplicación');
+    setAccentColorState(color);
   };
 
   const updateTrainer = (partial: Partial<TrainerProfile>) => {
@@ -174,7 +189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (partial.name && !partial.initials) {
         updated.initials = partial.name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
       }
-      if (updated.id) {
+      if (updated.id && !IS_READ_ONLY_PREVIEW) {
         localStorage.setItem('strainer_trainer', JSON.stringify(updated));
         // Asynchronously sync to Supabase profiles
         supabase
@@ -197,10 +212,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Sync to localStorage
   useEffect(() => {
+    if (IS_READ_ONLY_PREVIEW) return;
     localStorage.setItem('strainer_app_name', appName);
   }, [appName]);
 
   useEffect(() => {
+    if (IS_READ_ONLY_PREVIEW) return;
     if (trainer.id) {
       localStorage.setItem('strainer_trainer', JSON.stringify(trainer));
     } else {
@@ -209,15 +226,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [trainer]);
 
   useEffect(() => {
+    if (IS_READ_ONLY_PREVIEW) return;
     localStorage.setItem('strainer_clients', JSON.stringify(clients));
   }, [clients]);
 
   useEffect(() => {
+    if (IS_READ_ONLY_PREVIEW) return;
     localStorage.setItem('strainer_programs', JSON.stringify(programs));
   }, [programs]);
 
   useEffect(() => {
-    localStorage.setItem('strainer_accent', accentColor);
+    if (!IS_READ_ONLY_PREVIEW) localStorage.setItem('strainer_accent', accentColor);
     document.documentElement.style.setProperty('--accent-color', accentColor);
     const darkText = accentColor === '#CFFF5C' || accentColor === '#FFD34D';
     document.documentElement.style.setProperty('--accent-text', darkText ? '#101012' : '#FFFFFF');
@@ -819,6 +838,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     : (clients.find(c => c.id === activeClientId) || clients[0]);
 
   const updateClient = (id: string, partial: Partial<ClientData>) => {
+    assertWritable('Editar datos del cliente');
     if (realClient && realClient.id === id) {
       setRealClient(prev => prev ? { ...prev, ...partial } : null);
     }
@@ -837,6 +857,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addClient = (clientData: Partial<ClientData>) => {
+    assertWritable('Crear un cliente');
     const newId = `cli-${Date.now()}`;
     const name = clientData.name?.trim() ?? '';
     const initials = name
@@ -869,6 +890,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addTrainerNote = (clientId: string, content: string) => {
+    assertWritable('Crear una nota');
     const newNote = {
       id: `tn-${Date.now()}`,
       date: 'Hoy',
@@ -888,6 +910,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveProgram = async (program: Program) => {
+    assertWritable('Guardar un programa');
     if (userRole !== 'trainer' || !supabaseUser?.id || accountAccessStatus !== 'enabled') {
       throw new Error('Solo un Trainer con acceso habilitado puede guardar programas.');
     }
@@ -906,6 +929,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const applyProgramToClient = async (clientId: string, programId: string | null) => {
+    assertWritable('Aplicar o retirar un programa');
     if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
       throw new Error('Solo un Trainer con acceso habilitado puede aplicar una prescripción.');
     }
@@ -918,6 +942,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveNutritionPlanDraft = async (clientId: string, planId: string | null, snapshot: NutritionPlanSnapshot) => {
+    assertWritable('Guardar un plan nutricional');
     if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
       throw new Error('Solo un Trainer habilitado puede guardar un borrador nutricional.');
     }
@@ -930,6 +955,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const applyNutritionPlan = async (planId: string, requestKey: string) => {
+    assertWritable('Aplicar un plan nutricional');
     if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
       throw new Error('Solo un Trainer habilitado puede asignar una prescripción nutricional.');
     }
@@ -940,6 +966,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetAllData = () => {
+    assertWritable('Restablecer datos locales');
     localStorage.removeItem('strainer_clients');
     localStorage.removeItem('strainer_programs');
     localStorage.removeItem('strainer_nutrition');
@@ -954,7 +981,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveNutritionPlan(null);
     setNutritionPlanStatus('idle');
     setNutritionPlanError(null);
-    setAccentColor('#CFFF5C');
+    setAccentColorState('#CFFF5C');
     setActiveClientId('');
   };
 

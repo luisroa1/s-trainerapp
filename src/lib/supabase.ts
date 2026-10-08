@@ -7,6 +7,7 @@ import { clientFieldsFromPersistedData, readOptionalPersistedNumber } from './cl
 import { workoutSessionFromRpc } from './workoutExecution.mjs';
 import { buildTrainerWorkoutHistory } from './trainerWorkoutHistory.mjs';
 import { CLIENT_ONBOARDING_FLOW_VERSION, getCurrentHealthDeclaration, sameHealthDeclaration } from './clientOnboarding.mjs';
+import { protectSupabaseClient } from './supabaseReadOnlyGuard.mjs';
 
 const appTarget = import.meta.env.VITE_APP_TARGET?.trim();
 const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
@@ -20,14 +21,16 @@ const validatedTarget = validateSupabaseTarget({
 export const SUPABASE_URL = validatedTarget.supabaseUrl;
 export const SUPABASE_PROJECT_REF = validatedTarget.projectRef;
 export const SUPABASE_ANON_KEY = validatedTarget.publishableKey;
+export const IS_READ_ONLY_PREVIEW = import.meta.env.VITE_READ_ONLY_PREVIEW === 'true';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
 });
+export const supabase = protectSupabaseClient(supabaseClient, IS_READ_ONLY_PREVIEW);
 
 // Helper: Format client for database storage
 export const serializeClientToDb = (client: ClientData, ownerId?: string) => {

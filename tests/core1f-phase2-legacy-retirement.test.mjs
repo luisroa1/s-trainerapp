@@ -111,7 +111,8 @@ test('ClientHome and TrainerClientDetail do not render legacy metrics or executi
   const detail = source('../src/components/trainer/TrainerClientDetail.tsx');
   assert.doesNotMatch(home, /metrics\?\.(stepsToday|kcalToday|sleepHours)|weeklySchedule/);
   assert.doesNotMatch(detail, /adherencePercentage|completedWorkoutsCount|totalScheduledWorkoutsCount|stepsToday|sleepHours|currentWeight|client\.alert/);
-  assert.match(detail, /\(client\.trainerNotes \?\? \[\]\)\.map/);
+  assert.doesNotMatch(detail, /client\.trainerNotes|addTrainerNote/);
+  assert.match(detail, /Sesiones y resultados/);
   assert.match(detail, /ClientPathologiesSummary pathologies=\{client\.pathologies\}/);
 });
 

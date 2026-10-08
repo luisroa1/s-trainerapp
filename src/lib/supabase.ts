@@ -174,7 +174,7 @@ export const supabaseDb = {
       const [profile, training, weight, goal, health] = await Promise.all([
         supabase.from('client_profile').select('preferred_name,date_of_birth,physiological_sex,height_cm').eq('client_id', clientId).maybeSingle(),
         supabase.from('client_training_context').select('daily_activity_pattern,daily_steps_band,strength_training_status,experience_band,time_since_training_band,availability_days,training_location').eq('client_id', clientId).maybeSingle(),
-        supabase.from('client_weight_records').select('weight_kg,measured_on,recorded_at').eq('client_id', clientId).order('measured_on', { ascending: false }).order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('client_weight_records').select('weight_kg,measured_on,recorded_at').eq('client_id', clientId).order('measured_on', { ascending: false }).order('recorded_at', { ascending: false }).limit(20),
         supabase.from('client_goal_history').select('primary_goal,primary_other_text,secondary_goals,secondary_other_text,started_at,ended_at').eq('client_id', clientId).is('ended_at', null).maybeSingle(),
         supabase.from('client_health_declarations').select('id,client_id,has_relevant_information,categories,body_region,description,supersedes_id,recorded_at').eq('client_id', clientId).order('recorded_at', { ascending: true }),
       ]);
@@ -186,7 +186,8 @@ export const supabaseDb = {
         data: {
           profile: profile.data || null,
           training: training.data || null,
-          latestWeight: weight.data || null,
+          latestWeight: weight.data?.[0] || null,
+          weightRecords: weight.data || [],
           goal: goal.data || null,
           health: healthDeclaration,
           healthStatus: healthRows.length === 0 ? 'unreported' : healthDeclaration ? 'available' : 'ambiguous',
@@ -484,6 +485,44 @@ export const supabaseDb = {
   async getActiveNutritionPlan(): Promise<{ data: ActiveNutritionPlan | null; error: any }> {
     try {
       return { data: await readActiveNutritionPlan(supabase), error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async getTrainerActiveNutritionPlan(clientId: string): Promise<{ data: ActiveNutritionPlan | null; error: any }> {
+    try {
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('client_nutrition_assignments')
+        .select('id,assigned_at,nutrition_plan_version_id')
+        .eq('client_id', clientId)
+        .is('ended_at', null)
+        .maybeSingle();
+      if (assignmentError) return { data: null, error: assignmentError };
+      if (!assignment) return { data: null, error: null };
+
+      const { data: version, error: versionError } = await supabase
+        .from('nutrition_plan_versions')
+        .select('id,version_number,snapshot')
+        .eq('id', assignment.nutrition_plan_version_id)
+        .eq('client_id', clientId)
+        .maybeSingle();
+      if (versionError) return { data: null, error: versionError };
+      if (!version?.id || !Number.isInteger(version.version_number)
+        || !version.snapshot || !Array.isArray(version.snapshot.meals)) {
+        return { data: null, error: new Error('La versión nutricional asignada no tiene un snapshot válido.') };
+      }
+
+      return {
+        data: {
+          assignmentId: assignment.id,
+          assignedAt: assignment.assigned_at,
+          versionId: version.id,
+          versionNumber: version.version_number,
+          snapshot: version.snapshot,
+        },
+        error: null,
+      };
     } catch (error) {
       return { data: null, error };
     }

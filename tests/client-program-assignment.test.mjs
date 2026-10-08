@@ -70,7 +70,7 @@ test('assignment RPC is the only frontend assignment writer and requires confirm
 
 test('Trainer can re-apply the same program after an edit; database idempotency decides whether history changes', () => {
   const detail = readFileSync(new URL('../src/components/trainer/TrainerClientDetail.tsx', import.meta.url), 'utf8');
-  assert.match(detail, /disabled=\{assignmentStatus !== 'loaded' \|\| isApplying \|\| \(!selectedProgramId && !activeProgramId\)\}/);
+  assert.match(detail, /disabled=\{applying \|\| \(!selectedProgramId && !assignment\)\}/);
   assert.doesNotMatch(detail, /selectedProgramId === activeProgramId/);
   assert.match(detail, /await applyProgramToClient\(client\.id, selectedProgramId \|\| null\)/);
 });

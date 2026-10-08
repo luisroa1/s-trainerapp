@@ -1,16 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  ArrowLeft, 
-  MessageSquare, 
-  Apple, 
-  Dumbbell, 
-  Plus, 
-  Send 
-} from 'lucide-react';
-import { ClientData } from '../../types';
+import { ArrowLeft, Apple, Dumbbell } from 'lucide-react';
+import type { ActiveNutritionPlan, ClientData, TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { supabaseDb } from '../../lib/supabase';
-import type { TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
 import { formatPerformedLoad, formatPerformedMeasure, plannedPerformedRows } from '../../lib/trainerWorkoutHistory.mjs';
 import { ClientPathologiesSummary } from './ClientPathologiesSummary';
 import { TrainerClientProfilePanel } from './TrainerClientProfilePanel';
@@ -23,64 +15,61 @@ interface TrainerClientDetailProps {
   onEditNutrition: (clientId: string) => void;
 }
 
-export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
-  client,
-  onBack,
-  onEditProgram,
-  onEditNutrition
-}) => {
-  const { addTrainerNote, programs, applyProgramToClient } = useApp();
+type DetailTab = 'Resumen' | 'Entrenamiento' | 'Nutrición' | 'Progreso';
+
+const BLUE = '#5CD6FF';
+
+export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({ client, onBack, onEditProgram, onEditNutrition }) => {
+  const { programs, applyProgramToClient } = useApp();
   const [activeAssignment, setActiveAssignment] = useState<any | null>(null);
   const [assignmentStatus, setAssignmentStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
+  const [nutritionPlan, setNutritionPlan] = useState<ActiveNutritionPlan | null>(null);
+  const [nutritionStatus, setNutritionStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [workoutHistory, setWorkoutHistory] = useState<TrainerWorkoutHistoryEntry[]>([]);
   const [workoutHistoryStatus, setWorkoutHistoryStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
-  const [workoutHistoryError, setWorkoutHistoryError] = useState<string | null>(null);
   const [selectedProgramId, setSelectedProgramId] = useState('');
   const [isApplying, setIsApplying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'Entrenamientos' | 'Peso' | 'Medidas' | 'Fuerza' | 'Nutrición' | 'Actividad' | 'Fotos' | 'Notas'>('Entrenamientos');
-  const [newNoteText, setNewNoteText] = useState('');
-  const [showMessageModal, setShowMessageModal] = useState(false);
-  const [chatMessage, setChatMessage] = useState('');
-  const [chatHistory, setChatHistory] = useState<{ sender: 'trainer' | 'client'; text: string; time: string }[]>([
-    { sender: 'trainer', text: '¡Hola! ¿Cómo sentiste el press inclinado en la sesión de hoy?', time: 'Ayer 18:30' },
-    { sender: 'client', text: 'Bastante bien, con el banco a 30º el hombro no molestó nada.', time: 'Ayer 19:15' }
-  ]);
-
-  const refreshAssignment = async () => {
-    setAssignmentStatus('loading');
-    setAssignmentError(null);
-    const { data, error } = await supabaseDb.getActiveProgramAssignment(client.id);
-    if (error) {
-      setActiveAssignment(null);
-      setAssignmentStatus('error');
-      setAssignmentError('No se pudo consultar la prescripción actual.');
-      return;
-    }
-    setActiveAssignment(data);
-    setSelectedProgramId(data?.program_version.program_id || '');
-    setAssignmentStatus('loaded');
-  };
+  const [activeTab, setActiveTab] = useState<DetailTab>('Resumen');
 
   useEffect(() => {
-    void refreshAssignment();
+    let current = true;
+    setAssignmentStatus('loading');
+    setAssignmentError(null);
+    supabaseDb.getActiveProgramAssignment(client.id).then(({ data, error }) => {
+      if (!current) return;
+      if (error) {
+        setActiveAssignment(null);
+        setAssignmentStatus('error');
+        setAssignmentError('No se pudo consultar la prescripción de entrenamiento.');
+        return;
+      }
+      setActiveAssignment(data);
+      setSelectedProgramId(data?.program_version.program_id || '');
+      setAssignmentStatus('loaded');
+    });
+    return () => { current = false; };
+  }, [client.id]);
+
+  useEffect(() => {
+    let current = true;
+    setNutritionStatus('loading');
+    supabaseDb.getTrainerActiveNutritionPlan(client.id).then(({ data, error }) => {
+      if (!current) return;
+      setNutritionPlan(error ? null : data);
+      setNutritionStatus(error ? 'error' : 'loaded');
+    });
+    return () => { current = false; };
   }, [client.id]);
 
   useEffect(() => {
     let current = true;
     setWorkoutHistoryStatus('loading');
-    setWorkoutHistoryError(null);
     supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
       if (!current) return;
-      if (error || !data) {
-        setWorkoutHistory([]);
-        setWorkoutHistoryStatus('error');
-        setWorkoutHistoryError('No se pudo consultar el historial de entrenamientos.');
-        return;
-      }
-      setWorkoutHistory(data);
-      setWorkoutHistoryStatus('loaded');
+      setWorkoutHistory(error || !data ? [] : data);
+      setWorkoutHistoryStatus(error || !data ? 'error' : 'loaded');
     });
     return () => { current = false; };
   }, [client.id]);
@@ -95,7 +84,10 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
     setAssignmentError(null);
     try {
       await applyProgramToClient(client.id, selectedProgramId || null);
-      await refreshAssignment();
+      const { data, error } = await supabaseDb.getActiveProgramAssignment(client.id);
+      if (error) throw error;
+      setActiveAssignment(data);
+      setSelectedProgramId(data?.program_version.program_id || '');
       setAssignmentMessage(selectedProgramId ? 'Prescripción aplicada al cliente.' : 'El cliente ya no tiene un programa asignado.');
     } catch (error) {
       setAssignmentError(error instanceof Error ? error.message : 'No se pudo aplicar la prescripción.');
@@ -104,366 +96,163 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({
     }
   };
 
-  const handleAddNote = () => {
-    if (!newNoteText.trim()) return;
-    addTrainerNote(client.id, newNoteText.trim());
-    setNewNoteText('');
-  };
-
-  const handleSendMessage = () => {
-    if (!chatMessage.trim()) return;
-    setChatHistory(prev => [
-      ...prev,
-      { sender: 'trainer', text: chatMessage.trim(), time: 'Ahora' }
-    ]);
-    setChatMessage('');
-  };
-
   return (
-    <div className="p-8 max-w-[1240px] mx-auto pb-24">
-      {/* Top Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="w-10 h-10 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center text-[#8E8E94] hover:text-[#F5F4F0] hover:border-[#3A3A40]"
-          >
-            <ArrowLeft className="w-5 h-5" />
+    <main className="mx-auto max-w-[1440px] px-4 pb-20 pt-5 sm:px-7 lg:px-10">
+      <div className="mb-6 flex items-center justify-between gap-4 border-b border-[#303740] pb-5">
+        <div className="flex min-w-0 items-center gap-4">
+          <button type="button" onClick={onBack} aria-label="Volver a clientes" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#303740] text-[#A0A0A8] hover:text-white">
+            <ArrowLeft className="h-5 w-5" />
           </button>
-
-          {client.avatarUrl ? (
-            <img
-              src={client.avatarUrl}
-              alt={client.name}
-              className="w-11 h-11 rounded-full object-cover border border-[#2A2A2F] shrink-0"
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-bold text-sm text-[#F5F4F0] shrink-0">
-              {client.initials}
-            </div>
-          )}
-
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-extrabold font-display text-[#F5F4F0]">
-                {client.name}
-              </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#CFFF5C]/10 text-[#CFFF5C]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#CFFF5C]" />
-                Activo
-              </span>
-            </div>
-            <p className="text-xs text-[#8E8E94] mt-0.5">
-              {client.objective || 'Sin objetivo registrado'} · {activeProgram?.name || 'Sin programa asignado'}
-            </p>
+          {client.avatarUrl ? <img src={client.avatarUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" /> :
+            <div aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#20262D] font-display font-bold text-white">{client.initials || 'CL'}</div>}
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>Ficha deportiva</p>
+            <h1 className="truncate font-display text-2xl font-bold text-[#F5F4F0] sm:text-3xl">{client.name}</h1>
           </div>
         </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setShowMessageModal(true)}
-            className="px-4 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] flex items-center gap-2 transition-colors"
-          >
-            <MessageSquare className="w-4 h-4 text-[#8E8E94]" />
-            <span>Mensaje</span>
-          </button>
-
-          <button
-            onClick={() => onEditNutrition(client.id)}
-            className="px-4 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] hover:border-[#3A3A40] flex items-center gap-2 transition-colors"
-          >
-            <Apple className="w-4 h-4 text-[#8E8E94]" />
-            <span>Plan nutricional</span>
-          </button>
-
-          <div className="flex items-center gap-2">
-            <select aria-label="Programa para aplicar a este cliente" value={selectedProgramId}
-              onChange={event => setSelectedProgramId(event.target.value)}
-              disabled={assignmentStatus !== 'loaded' || isApplying}
-              className="max-w-56 px-3 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0]">
-              <option value="">Sin programa asignado</option>
-              {programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
-            </select>
-            <button onClick={() => void handleApplyProgram()}
-              disabled={assignmentStatus !== 'loaded' || isApplying || (!selectedProgramId && !activeProgramId)}
-              style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-              className="px-4 py-2.5 rounded-full font-bold text-xs shadow-md flex items-center gap-2 disabled:opacity-50">
-              <Dumbbell className="w-4 h-4 stroke-[2.5]" />
-              <span>{isApplying ? 'Aplicando…' : selectedProgramId ? 'Aplicar a cliente' : 'Quitar programa'}</span>
-            </button>
-            {activeProgram && <button onClick={() => onEditProgram(activeProgram.id)}
-              className="px-4 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0]">Editar programa</button>}
-          </div>
-        </div>
+        <span className="hidden text-xs text-[#7D8791] sm:block">Información de consulta · fuentes canónicas</span>
       </div>
 
-      {assignmentStatus === 'loading' && <p role="status" className="mb-4 text-xs text-[#8E8E94]">Consultando la prescripción actual…</p>}
-      {assignmentError && <p role="alert" className="mb-4 text-xs text-red-300">{assignmentError}</p>}
-      {assignmentMessage && <p role="status" className="mb-4 text-xs text-emerald-300">{assignmentMessage}</p>}
+      {(assignmentError || assignmentMessage) && <p role={assignmentError ? 'alert' : 'status'} className={`mb-4 text-xs ${assignmentError ? 'text-red-300' : 'text-sky-200'}`}>{assignmentError || assignmentMessage}</p>}
 
-      <ClientPathologiesSummary pathologies={client.pathologies} />
-      <TrainerClientProfilePanel client={client} />
+      <nav aria-label="Secciones de la ficha" className="mb-6 flex gap-5 overflow-x-auto border-b border-[#303740] text-xs font-semibold sm:gap-8">
+        {(['Resumen', 'Entrenamiento', 'Nutrición', 'Progreso'] as const).map(tab => <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-current={activeTab === tab ? 'page' : undefined} className={`relative shrink-0 pb-3 ${activeTab === tab ? 'text-white' : 'text-[#8E8E94] hover:text-white'}`}>
+          {tab}{activeTab === tab && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full" style={{ backgroundColor: BLUE }} />}
+        </button>)}
+      </nav>
 
-      {/* Tabs Row */}
-      <div className="flex items-center gap-6 border-b border-[#2A2A2F] mb-6 text-xs font-semibold">
-        {(['Entrenamientos', 'Peso', 'Medidas', 'Fuerza', 'Nutrición', 'Actividad', 'Fotos', 'Notas'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-3 transition-colors relative ${
-              activeTab === tab
-                ? 'text-[#F5F4F0] font-bold'
-                : 'text-[#8E8E94] hover:text-[#F5F4F0]'
-            }`}
-          >
-            {tab}
-            {activeTab === tab && (
-              <div 
-                className="absolute bottom-0 inset-x-0 h-0.5 rounded-full" 
-                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)' }}
-              />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Content depending on tab */}
-      {activeTab === 'Entrenamientos' && (
-        <div className="grid grid-cols-3 gap-6">
-          {/* Real persisted execution history; legacy weeklySchedule is not execution evidence. */}
-          <div className="col-span-2 space-y-6">
-            <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F]">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase">Últimas 20 sesiones registradas</span>
-                {workoutHistoryStatus === 'loaded' && <span className="text-xs text-[#8E8E94]">{workoutHistory.length}</span>}
-              </div>
-              {workoutHistoryStatus === 'loading' && <p role="status" className="text-sm text-[#8E8E94]">Consultando ejecuciones registradas…</p>}
-              {workoutHistoryStatus === 'error' && (
-                <div role="alert" className="text-sm text-red-300">
-                  <p>{workoutHistoryError}</p>
-                  <button type="button" onClick={() => {
-                    setWorkoutHistoryStatus('loading');
-                    void supabaseDb.getTrainerWorkoutHistory(client.id, { limit: 20, offset: 0 }).then(({ data, error }) => {
-                      if (error || !data) {
-                        setWorkoutHistoryStatus('error');
-                        setWorkoutHistoryError('No se pudo consultar el historial de entrenamientos.');
-                        return;
-                      }
-                      setWorkoutHistory(data);
-                      setWorkoutHistoryStatus('loaded');
-                      setWorkoutHistoryError(null);
-                    });
-                  }} className="mt-2 underline">Reintentar</button>
-                </div>
-              )}
-              {workoutHistoryStatus === 'loaded' && workoutHistory.length === 0 && (
-                <p className="text-sm text-[#8E8E94]">Todavía no hay entrenamientos registrados.</p>
-              )}
-              {workoutHistoryStatus === 'loaded' && workoutHistory.map((entry, sessionIndex) => (
-                <details key={entry.session.id} open={sessionIndex === 0} className="border-t border-[#2A2A2F] py-3 first:border-0 first:pt-0">
-                  <summary className="cursor-pointer list-none">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-sm font-bold text-[#F5F4F0]">{entry.day.title}</h3>
-                        <p className="mt-1 text-[11px] text-[#8E8E94]">
-                          {new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.session.started_at))}
-                        </p>
-                      </div>
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${entry.execution.sessionStatus === 'finished' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-300'}`}>
-                        {entry.execution.sessionStatus === 'finished' ? 'Finalizada' : 'En curso'}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-[#A0A0A8]">
-                      Series registradas: {entry.execution.recordedPlannedSetCount}/{entry.execution.plannedSetCount}
-                      {entry.execution.extraSetCount > 0 && ` · +${entry.execution.extraSetCount} extra`}
-                    </p>
-                  </summary>
-                  <div className="mt-4 space-y-4">
-                    {entry.day.exercises.map((exercise: TrainerWorkoutSnapshotExercise) => (
-                      <div key={exercise.id} className="rounded-xl border border-[#2A2A2F] bg-[#1B1B1F] p-3.5">
-                        <div className="mb-3">
-                          <h4 className="text-sm font-bold text-[#F5F4F0]">{exercise.order}. {exercise.name}</h4>
-                          {exercise.instructions && <p className="mt-1 text-xs leading-relaxed text-[#A0A0A8]">{exercise.instructions}</p>}
-                          {(() => {
-                            const counts = entry.execution.exercises.find(item => item.exercise_id === exercise.id);
-                            return counts ? <p className="mt-1 text-[11px] text-[#8E8E94]">
-                              Series registradas: {counts.recordedPlannedSetCount}/{counts.plannedSetCount}
-                              {counts.extraSetCount > 0 && ` · +${counts.extraSetCount} extra`}
-                            </p> : null;
-                          })()}
-                        </div>
-                        <div className="grid grid-cols-[minmax(64px,0.55fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#77777F]">Serie</span>
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#A0A0A8]">Pautado</span>
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-[#CFFF5C]">Realizado</span>
-                          {plannedPerformedRows(entry, exercise.id).map(row => {
-                            const plannedParts = row.planned ? [
-                              row.planned.reps === null ? 'Reps sin pauta' : `${row.planned.reps} reps`,
-                              row.planned.load === null ? 'Carga sin pauta' : row.planned.load,
-                              row.planned.rir === null ? 'RIR sin pauta' : `RIR ${row.planned.rir}`,
-                            ].filter(Boolean) : [];
-                            const performed = row.performed;
-                            const performedParts = performed ? [
-                              formatPerformedMeasure(performed),
-                              formatPerformedLoad(performed),
-                              performed.rir_performed === null ? 'RIR Sin dato' : `RIR ${performed.rir_performed}`,
-                            ] : [];
-                            return (
-                              <React.Fragment key={row.set_number}>
-                                <span className="text-[#A0A0A8]">Serie {row.set_number}</span>
-                                <span className="text-[#F5F4F0]">{row.planned ? (plannedParts.join(' · ') || 'Sin objetivo estructurado') : 'Sin serie pautada'}</span>
-                                <span className="text-[#F5F4F0]">
-                                  {performed ? performedParts.join(' · ') : 'Sin registro'}
-                                  {performed?.note && <span className="mt-1 block text-[#A0A0A8]">{performed.note}</span>}
-                                </span>
-                              </React.Fragment>
-                            );
-                          })}
-                        </div>
-                        {(exercise.recentExposures?.length || 0) >= 2 && (
-                          <div className="mt-3 border-t border-[#2A2A2F] pt-3">
-                            <h5 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#8E8E94]">Últimas exposiciones</h5>
-                            <div className="space-y-2">
-                              {exercise.recentExposures?.map(exposure => (
-                                <div key={exposure.sessionId} className="text-[11px] text-[#A0A0A8]">
-                                  <p>{new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(new Date(exposure.startedAt))} · versión {exposure.versionNumber} · {exposure.recordedSetCount} series registradas</p>
-                                  <p className="mt-0.5">{exposure.results.map(result =>
-                                    `S${result.set_number}: ${formatPerformedMeasure(result)} · ${formatPerformedLoad(result)} · RIR ${result.rir_performed ?? 'Sin dato'}`
-                                  ).join(' | ')}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
-
-          {/* Column 3: NOTAS DEL ENTRENADOR */}
-          <div className="p-5 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-bold tracking-widest text-[#8E8E94] uppercase block mb-4">
-                NOTAS DEL ENTRENADOR
-              </span>
-
-              {/* Note input */}
-              <div className="mb-4">
-                <textarea
-                  value={newNoteText}
-                  onChange={e => setNewNoteText(e.target.value)}
-                  placeholder="Añadir nota sobre esta sesión..."
-                  rows={2}
-                  className="w-full p-2.5 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] placeholder-[#5C5C62] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none resize-none"
-                />
-                <button
-                  onClick={handleAddNote}
-                  style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-                  className="mt-1.5 px-3 py-1.5 rounded-full font-bold text-[11px] shadow-sm flex items-center gap-1 active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                  Añadir nota
-                </button>
-              </div>
-
-              {/* Notes list */}
-              <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
-                {(client.trainerNotes ?? []).map((note) => (
-                  <div key={note.id} className="p-3 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F]/60">
-                    <p className="text-xs text-[#F5F4F0] leading-relaxed">
-                      {note.content}
-                    </p>
-                    <span className="text-[10px] text-[#8E8E94] mt-2 block font-medium">
-                      {note.date}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      {activeTab === 'Resumen' && <>
+        <TrainerClientProfilePanel client={client} />
+        <ClientPathologiesSummary pathologies={client.pathologies} />
+        <div className="mt-7 grid gap-7 xl:grid-cols-2">
+          <CurrentTrainingPlan
+            status={assignmentStatus}
+            error={assignmentError}
+            assignment={activeAssignment}
+            programName={activeProgram?.name || null}
+            programs={programs}
+            selectedProgramId={selectedProgramId}
+            onSelectProgram={setSelectedProgramId}
+            onApply={() => void handleApplyProgram()}
+            onEdit={activeProgram ? () => onEditProgram(activeProgram.id) : undefined}
+            applying={isApplying}
+          />
+          <CurrentNutritionPlan status={nutritionStatus} plan={nutritionPlan} onEdit={() => onEditNutrition(client.id)} />
         </div>
-      )}
+      </>}
 
-      {activeTab === 'Nutrición' && <TrainerNutritionLogHistory clientId={client.id} />}
+      {activeTab === 'Entrenamiento' && <WorkoutHistory status={workoutHistoryStatus} entries={workoutHistory} onRetry={() => {
+        setWorkoutHistoryStatus('loading');
+        void supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
+          setWorkoutHistory(error || !data ? [] : data);
+          setWorkoutHistoryStatus(error || !data ? 'error' : 'loaded');
+        });
+      }} />}
 
-      {activeTab !== 'Entrenamientos' && activeTab !== 'Nutrición' && (
-        <div className="p-8 rounded-[16px] bg-[#16161A] border border-[#2A2A2F] text-center">
-          <p className="text-xs text-[#8E8E94]">
-            Datos históricos sincronizados para <span className="text-[#F5F4F0] font-bold">{client.name}</span> en pestaña {activeTab}.
-          </p>
-        </div>
-      )}
+      {activeTab === 'Nutrición' && <div className="space-y-6">
+        <CurrentNutritionPlan status={nutritionStatus} plan={nutritionPlan} onEdit={() => onEditNutrition(client.id)} />
+        <TrainerNutritionLogHistory clientId={client.id} />
+      </div>}
 
-      {/* Message Modal */}
-      {showMessageModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-[420px] bg-[#16161A] border border-[#2A2A2F] rounded-[24px] p-5 shadow-2xl flex flex-col h-[480px]">
-            <div className="flex items-center justify-between pb-3 border-b border-[#2A2A2F]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-bold text-xs text-[#F5F4F0]">
-                  {client.initials}
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-[#F5F4F0]">{client.name}</h3>
-                  <span className="text-[10px] text-[#CFFF5C]">En línea</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowMessageModal(false)}
-                className="text-xs text-[#8E8E94] hover:text-[#F5F4F0]"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-3">
-              {chatHistory.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex flex-col ${
-                    msg.sender === 'trainer' ? 'items-end' : 'items-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-[80%] p-3 rounded-2xl text-xs leading-relaxed ${
-                      msg.sender === 'trainer'
-                        ? 'bg-[var(--accent-color,#CFFF5C)] text-[#101012] font-medium rounded-tr-xs'
-                        : 'bg-[#1B1B1F] text-[#F5F4F0] border border-[#2A2A2F] rounded-tl-xs'
-                    }`}
-                  >
-                    {msg.text}
-                  </div>
-                  <span className="text-[9px] text-[#5C5C62] mt-1 px-1">{msg.time}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Send input */}
-            <div className="pt-3 border-t border-[#2A2A2F] flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Escribe un mensaje al cliente..."
-                value={chatMessage}
-                onChange={e => setChatMessage(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                className="flex-1 px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] placeholder-[#5C5C62] focus:outline-none focus:border-[var(--accent-color,#CFFF5C)]"
-              />
-              <button
-                onClick={handleSendMessage}
-                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-                className="w-8 h-8 rounded-xl flex items-center justify-center"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {activeTab === 'Progreso' && <section className="rounded-[20px] border border-[#303740] bg-[#15191E] p-6 sm:p-8">
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: BLUE }}>Evolución documentada</p>
+        <h2 className="mt-2 font-display text-xl font-semibold text-white">Datos reales, sin métricas estimadas</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#A0A0A8]">Los registros de peso disponibles aparecen en el perfil. Las sesiones y exposiciones de fuerza registradas se consultan en Entrenamiento. Esta fase no calcula tendencias ni resultados agregados.</p>
+      </section>}
+    </main>
   );
 };
+
+function CurrentTrainingPlan({ status, error, assignment, programName, programs, selectedProgramId, onSelectProgram, onApply, onEdit, applying }: {
+  status: 'loading' | 'loaded' | 'error'; error: string | null; assignment: any; programName: string | null;
+  programs: { id: string; name: string }[]; selectedProgramId: string; onSelectProgram: (id: string) => void;
+  onApply: () => void; onEdit?: () => void; applying: boolean;
+}) {
+  const version = assignment?.program_version;
+  return <section aria-labelledby="current-training-plan-title" className="rounded-[20px] border border-[#303740] bg-[#15191E] p-5 sm:p-6">
+    <div className="flex items-start justify-between gap-4 border-b border-[#303740] pb-4">
+      <div><p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>Planificación actual</p><h2 id="current-training-plan-title" className="mt-1 font-display text-lg font-semibold text-white">Entrenamiento</h2></div>
+      <Dumbbell className="h-5 w-5" style={{ color: BLUE }} />
+    </div>
+    {status === 'loading' && <p role="status" className="py-5 text-sm text-[#8E8E94]">Consultando asignación vigente…</p>}
+    {status === 'error' && <p role="alert" className="py-5 text-sm text-red-300">{error || 'No se pudo consultar la asignación vigente.'}</p>}
+    {status === 'loaded' && (version ? <>
+      <div className="py-4">
+        <p className="text-base font-semibold text-white">{programName || 'Programa asignado'}</p>
+        <p className="mt-1 text-xs text-[#8E8E94]">Versión {version.version_number} · asignada {formatDate(version.created_at)}</p>
+        <p className="mt-3 text-xs text-[#C2C2C7]">{Array.isArray(version.snapshot?.days) ? version.snapshot.days.length : 0} días pautados en esta versión</p>
+      </div>
+    </> : <p className="py-5 text-sm text-[#A0A0A8]">No hay una asignación de entrenamiento activa.</p>)}
+    {status === 'loaded' && <div className="flex flex-wrap items-center gap-2 border-t border-[#303740] pt-4">
+      <label className="sr-only" htmlFor="client-program-select">Programa para aplicar a este cliente</label>
+      <select id="client-program-select" value={selectedProgramId} onChange={event => onSelectProgram(event.target.value)} disabled={applying} className="min-w-0 flex-1 rounded-full border border-[#343B43] bg-[#101418] px-3 py-2.5 text-xs text-white">
+        <option value="">Sin programa asignado</option>{programs.map(program => <option key={program.id} value={program.id}>{program.name}</option>)}
+      </select>
+      <button type="button" onClick={onApply} disabled={applying || (!selectedProgramId && !assignment)} className="rounded-full px-4 py-2.5 text-xs font-bold text-[#07131A] disabled:opacity-50" style={{ backgroundColor: BLUE }}>{applying ? 'Aplicando…' : selectedProgramId ? 'Aplicar' : 'Quitar'}</button>
+      {onEdit && <button type="button" onClick={onEdit} className="rounded-full border border-[#343B43] px-4 py-2.5 text-xs font-semibold text-white">Editar programa</button>}
+    </div>}
+  </section>;
+}
+
+function CurrentNutritionPlan({ status, plan, onEdit }: { status: 'loading' | 'loaded' | 'error'; plan: ActiveNutritionPlan | null; onEdit: () => void }) {
+  return <section aria-labelledby="current-nutrition-plan-title" className="rounded-[20px] border border-[#303740] bg-[#15191E] p-5 sm:p-6">
+    <div className="flex items-start justify-between gap-4 border-b border-[#303740] pb-4">
+      <div><p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>Planificación actual</p><h2 id="current-nutrition-plan-title" className="mt-1 font-display text-lg font-semibold text-white">Nutrición</h2></div><Apple className="h-5 w-5" style={{ color: BLUE }} />
+    </div>
+    {status === 'loading' && <p role="status" className="py-5 text-sm text-[#8E8E94]">Consultando asignación vigente…</p>}
+    {status === 'error' && <p role="alert" className="py-5 text-sm text-red-300">No se pudo consultar la asignación nutricional vigente.</p>}
+    {status === 'loaded' && !plan && <p className="py-5 text-sm text-[#A0A0A8]">No hay una prescripción nutricional activa.</p>}
+    {status === 'loaded' && plan && <div className="py-4">
+      <p className="text-base font-semibold text-white">{plan.snapshot.plan_name || 'Plan nutricional'}</p>
+      <p className="mt-1 text-xs text-[#8E8E94]">Versión {plan.versionNumber} · asignada {formatDate(plan.assignedAt)}</p>
+      {plan.snapshot.objective && <p className="mt-3 text-xs text-[#C2C2C7]">{plan.snapshot.objective}</p>}
+      {plan.snapshot.meals.length === 0 ? <p className="mt-3 text-xs text-[#A0A0A8]">La prescripción activa todavía no contiene comidas pautadas.</p> : <ol className="mt-3 space-y-2">
+        {plan.snapshot.meals.slice().sort((a, b) => a.order - b.order).map(meal => <li key={meal.id} className="border-t border-[#303740] pt-2.5">
+          <p className="text-xs font-semibold text-white">{meal.name}</p>
+          {meal.description && <p className="mt-1 text-xs text-[#A0A0A8]">{meal.description}</p>}
+          {meal.items.length > 0 && <ul className="mt-1 space-y-0.5 text-xs text-[#C2C2C7]">{meal.items.map(item => <li key={item.id}>{item.label} · {item.quantity == null ? 'Sin cantidad indicada' : `${item.quantity}${item.unit ? ` ${item.unit}` : ''}`}</li>)}</ul>}
+        </li>)}
+      </ol>}
+    </div>}
+    <div className="border-t border-[#303740] pt-4"><button type="button" onClick={onEdit} className="rounded-full border border-[#343B43] px-4 py-2.5 text-xs font-semibold text-white">Abrir planificación nutricional</button></div>
+  </section>;
+}
+
+function WorkoutHistory({ status, entries, onRetry }: { status: 'loading' | 'loaded' | 'error'; entries: TrainerWorkoutHistoryEntry[]; onRetry: () => void }) {
+  return <section aria-labelledby="workout-history-title" className="rounded-[20px] border border-[#303740] bg-[#15191E] p-5 sm:p-7">
+    <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>Actividad documentada</p>
+    <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2"><h2 id="workout-history-title" className="font-display text-xl font-semibold text-white">Sesiones y resultados</h2>{status === 'loaded' && <span className="text-xs text-[#8E8E94]">{entries.length} registros · últimas 20 sesiones</span>}</div>
+    {status === 'loading' && <p role="status" className="py-8 text-sm text-[#8E8E94]">Consultando sesiones registradas…</p>}
+    {status === 'error' && <div role="alert" className="py-8 text-sm text-red-300">No se pudo consultar el historial de entrenamientos.<button type="button" onClick={onRetry} className="ml-2 underline">Reintentar</button></div>}
+    {status === 'loaded' && entries.length === 0 && <p className="py-8 text-sm text-[#A0A0A8]">Todavía no hay sesiones registradas.</p>}
+    <div className="divide-y divide-[#303740]">
+      {entries.map((entry, sessionIndex) => <details key={entry.session.id} open={sessionIndex === 0} className="py-4">
+        <summary className="cursor-pointer list-none"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-white">{entry.day.title}</h3><p className="mt-1 text-xs text-[#8E8E94]">{formatDate(entry.session.started_at, true)}</p></div><span className="text-xs text-[#A0A0A8]">{entry.execution.sessionStatus === 'finished' ? 'Finalizada' : 'En curso'} · {entry.execution.recordedPlannedSetCount}/{entry.execution.plannedSetCount} series registradas</span></div></summary>
+        <div className="mt-4 space-y-4">{entry.day.exercises.map((exercise: TrainerWorkoutSnapshotExercise) => {
+          const counts = entry.execution.exercises.find(item => item.exercise_id === exercise.id);
+          return <div key={exercise.id} className="border-l-2 border-[#263A46] pl-4">
+            <h4 className="text-sm font-semibold text-white">{exercise.order}. {exercise.name}</h4>
+            {exercise.instructions && <p className="mt-1 text-xs text-[#A0A0A8]">{exercise.instructions}</p>}
+            {counts && <p className="mt-1 text-[11px] text-[#8E8E94]">Series registradas: {counts.recordedPlannedSetCount}/{counts.plannedSetCount}{counts.extraSetCount > 0 && ` · ${counts.extraSetCount} series extra`}</p>}
+            <div className="mt-3 grid grid-cols-[minmax(48px,0.45fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
+              <span className="text-[10px] font-bold uppercase text-[#7D8791]">Serie</span><span className="text-[10px] font-bold uppercase text-[#7D8791]">Pautado</span><span className="text-[10px] font-bold uppercase text-[#7D8791]">Registrado</span>
+              {plannedPerformedRows(entry, exercise.id).map(row => <React.Fragment key={row.set_number}>
+                <span className="text-[#A0A0A8]">{row.set_number}</span>
+                <span className="text-[#D7DADF]">{row.planned ? [row.planned.reps == null ? 'Reps sin pauta' : `${row.planned.reps} reps`, row.planned.load ?? 'Carga sin pauta', row.planned.rir == null ? 'RIR sin pauta' : `RIR ${row.planned.rir}`].join(' · ') : 'Sin serie pautada'}</span>
+                <span className="text-[#D7DADF]">{row.performed ? `${formatPerformedMeasure(row.performed)} · ${formatPerformedLoad(row.performed)} · RIR ${row.performed.rir_performed ?? 'Sin dato'}` : 'Sin registro'}{row.performed?.note && <small className="mt-1 block text-[#8E8E94]">{row.performed.note}</small>}</span>
+              </React.Fragment>)}
+            </div>
+            {(exercise.recentExposures?.length || 0) >= 2 && <div className="mt-3 border-t border-[#303740] pt-3"><h5 className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E94]">Exposiciones anteriores registradas</h5><ul className="mt-2 space-y-2">{exercise.recentExposures?.map(exposure => <li key={exposure.sessionId} className="text-[11px] text-[#A0A0A8]">{formatDate(exposure.startedAt)} · versión {exposure.versionNumber} · {exposure.recordedSetCount} series</li>)}</ul></div>}
+          </div>;
+        })}</div>
+      </details>)}
+    </div>
+  </section>;
+}
+
+function formatDate(value: string | null | undefined, withTime = false) {
+  if (!value) return 'fecha no disponible';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'fecha no disponible';
+  return new Intl.DateTimeFormat('es-ES', withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' }).format(date);
+}

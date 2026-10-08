@@ -56,6 +56,35 @@ test('Trainer adapter batches only existing Trainer-readable canonical profile t
   assert.match(detail, /<TrainerClientProfilePanel client=\{client\} \/>/);
 });
 
+test('Trainer detail uses canonical active nutrition and versioned training assignment reads', () => {
+  const nutritionReader = adapter.slice(adapter.indexOf('async getTrainerActiveNutritionPlan'), adapter.indexOf('async saveNutritionPlanDraft'));
+  assert.match(nutritionReader, /from\('client_nutrition_assignments'\)/);
+  assert.match(nutritionReader, /from\('nutrition_plan_versions'\)/);
+  assert.match(nutritionReader, /\.eq\('client_id', clientId\)/);
+  assert.match(detail, /getActiveProgramAssignment\(client\.id\)/);
+  assert.match(detail, /getTrainerActiveNutritionPlan\(client\.id\)/);
+  assert.match(detail, /<TrainerNutritionLogHistory clientId=\{client\.id\} \/>/);
+  assert.match(detail, /<WorkoutHistory status=\{workoutHistoryStatus\}/);
+  assert.doesNotMatch(detail, /client\.objective/);
+  assert.doesNotMatch(detail, /Datos históricos sincronizados/);
+});
+
+test('Trainer detail does not expose simulated messaging, note entry, or empty tabs', () => {
+  assert.doesNotMatch(detail, /showMessageModal|chatHistory|handleSendMessage|NOTAS DEL ENTRENADOR|newNoteText/);
+  assert.match(detail, /'Resumen', 'Entrenamiento', 'Nutrición', 'Progreso'/);
+  assert.doesNotMatch(detail, /'Peso', 'Medidas', 'Fuerza', 'Actividad', 'Fotos', 'Notas'/);
+  assert.match(detail, /sm:px-7 lg:px-10/);
+  assert.match(panel, /sm:flex-row/);
+});
+
+test('current prescriptions distinguish missing assignment, query failure, and an empty immutable meal list', () => {
+  assert.match(detail, /No hay una asignación de entrenamiento activa/);
+  assert.match(detail, /No se pudo consultar la asignación nutricional vigente/);
+  assert.match(detail, /No hay una prescripción nutricional activa/);
+  assert.match(detail, /todavía no contiene comidas pautadas/);
+  assert.match(detail, /plan\.snapshot\.meals\.length === 0/);
+});
+
 test('existing 1A RLS permits owned-Trainer reads but keeps menstrual data Client-only and state private', () => {
   for (const table of ['client_profile', 'client_training_context', 'client_weight_records', 'client_goal_history', 'client_health_declarations']) {
     const policyBlock = migration.slice(migration.indexOf(`CREATE POLICY ${table === 'client_profile' ? 'client_profile_select' : `${table}_select`}`));

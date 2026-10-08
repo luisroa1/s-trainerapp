@@ -65,30 +65,27 @@ const renderDetail = (client: ClientData) => renderToStaticMarkup(
 );
 
 describe('TrainerClientDetail legacy persisted shapes', () => {
-  test('renders a full detail with optional legacy data absent', () => {
+  test('renders the professional detail shell with optional legacy data absent', () => {
     const html = renderDetail(minimalClient);
-    assert.match(html, /Sin datos/);
-    assert.match(html, /Sin datos suficientes/);
-    assert.match(html, /Sin información registrada/);
+    assert.match(html, /Ficha deportiva/);
+    assert.match(html, /Resumen/);
+    assert.match(html, /Cargando perfil deportivo/);
     assert.doesNotMatch(html, /70,0 kg|70\.0 kg|86\s*%/);
   });
 
-  test('renders present metrics, weight, and notes without changing their values', () => {
+  test('legacy metrics and local notes do not masquerade as canonical profile or progress', () => {
     const html = renderDetail({
       ...minimalClient,
       currentWeight: 82.5,
       metrics: { stepsToday: 1234, sleepHours: '6 h' },
       trainerNotes: [{ id: 'note-1', date: 'Hoy', content: 'Nota conservada' }],
     });
-    assert.match(html, /1,234/);
-    assert.match(html, /6 h/);
-    assert.match(html, /82,5 kg/);
-    assert.match(html, /Nota conservada/);
+    assert.doesNotMatch(html, /1,234|6 h|82,5 kg|Nota conservada/);
   });
 
-  test('renders neutral values when the metrics object exists but its values are absent', () => {
+  test('legacy metrics never become zero-valued profile facts', () => {
     const html = renderDetail({ ...minimalClient, metrics: {} });
-    assert.match(html, /Sin datos/);
+    assert.match(html, /Cargando perfil deportivo/);
     assert.doesNotMatch(html, /PASOS[\s\S]*?>\s*0\s*</);
   });
 

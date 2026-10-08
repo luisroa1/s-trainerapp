@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Apple, Dumbbell } from 'lucide-react';
+import { ArrowLeft, Apple, ChartNoAxesCombined, ClipboardList, Dumbbell, FileText } from 'lucide-react';
 import type { ActiveNutritionPlan, ClientData, TrainerWorkoutHistoryEntry, TrainerWorkoutSnapshotExercise } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { supabaseDb } from '../../lib/supabase';
@@ -13,13 +13,14 @@ interface TrainerClientDetailProps {
   onBack: () => void;
   onEditProgram: (programId: string) => void;
   onEditNutrition: (clientId: string) => void;
+  onOpenReports: () => void;
 }
 
-type DetailTab = 'Resumen' | 'Entrenamiento' | 'Nutrición' | 'Progreso';
+type DetailTab = 'Entrenamiento' | 'Nutrición' | 'Progreso' | 'Seguimiento' | 'Informes';
 
 const BLUE = '#5CD6FF';
 
-export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({ client, onBack, onEditProgram, onEditNutrition }) => {
+export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({ client, onBack, onEditProgram, onEditNutrition, onOpenReports }) => {
   const { programs, applyProgramToClient } = useApp();
   const [activeAssignment, setActiveAssignment] = useState<any | null>(null);
   const [assignmentStatus, setAssignmentStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -31,7 +32,7 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({ client
   const [workoutHistoryStatus, setWorkoutHistoryStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [selectedProgramId, setSelectedProgramId] = useState('');
   const [isApplying, setIsApplying] = useState(false);
-  const [activeTab, setActiveTab] = useState<DetailTab>('Resumen');
+  const [activeTab, setActiveTab] = useState<DetailTab>('Entrenamiento');
 
   useEffect(() => {
     let current = true;
@@ -97,71 +98,115 @@ export const TrainerClientDetail: React.FC<TrainerClientDetailProps> = ({ client
   };
 
   return (
-    <main className="mx-auto max-w-[1440px] px-4 pb-20 pt-5 sm:px-7 lg:px-10">
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-[#303740] pb-5">
+    <div className="min-h-[calc(100vh-4rem)] bg-[#08121E] text-[#E8F1F8]">
+      <div className="flex items-center justify-between gap-4 border-b border-[#147BC1]/50 bg-[#0B1928] px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-4">
-          <button type="button" onClick={onBack} aria-label="Volver a clientes" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#303740] text-[#A0A0A8] hover:text-white">
+          <button type="button" onClick={onBack} aria-label="Volver a clientes" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#24516D] text-[#B3C4D2] transition hover:border-[#5CD6FF] hover:text-white">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          {client.avatarUrl ? <img src={client.avatarUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" /> :
-            <div aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#20262D] font-display font-bold text-white">{client.initials || 'CL'}</div>}
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>Ficha deportiva</p>
-            <h1 className="truncate font-display text-2xl font-bold text-[#F5F4F0] sm:text-3xl">{client.name}</h1>
+            <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-[#48BDF2]">S-TRAINER · ESTACIÓN DE TRABAJO</p>
+            <h1 className="truncate font-display text-xl font-semibold text-white sm:text-2xl">Ficha de {client.name}</h1>
           </div>
         </div>
-        <span className="hidden text-xs text-[#7D8791] sm:block">Información de consulta · fuentes canónicas</span>
+        <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-[#93A8B9] lg:block">Panel Trainer</span>
       </div>
 
-      {(assignmentError || assignmentMessage) && <p role={assignmentError ? 'alert' : 'status'} className={`mb-4 text-xs ${assignmentError ? 'text-red-300' : 'text-sky-200'}`}>{assignmentError || assignmentMessage}</p>}
+      <div className="grid items-start xl:grid-cols-[250px_minmax(0,1fr)_220px]">
+        <aside aria-label="Datos esenciales del cliente" className="border-b border-[#147BC1]/50 bg-[#0A1725] p-4 xl:sticky xl:top-0 xl:h-[calc(100vh-4rem)] xl:overflow-y-auto xl:border-b-0 xl:border-r">
+          <div className="mb-4 flex items-center gap-3">
+            {client.avatarUrl ? <img src={client.avatarUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg border border-[#24516D] object-cover" /> :
+              <div aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#24516D] bg-[#10263A] font-display font-bold text-white">{client.initials || 'CL'}</div>}
+            <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#7893A7]">Cliente</p><h2 className="truncate text-sm font-semibold text-white">{client.name}</h2></div>
+          </div>
+          <TrainerClientProfilePanel client={client} variant="rail" />
+          <p className="mt-3 border-t border-[#183B55] pt-3 text-[10px] leading-relaxed text-[#7893A7]">La información personal procede del perfil canónico y respeta el acceso autorizado.</p>
+        </aside>
 
-      <nav aria-label="Secciones de la ficha" className="mb-6 flex gap-5 overflow-x-auto border-b border-[#303740] text-xs font-semibold sm:gap-8">
-        {(['Resumen', 'Entrenamiento', 'Nutrición', 'Progreso'] as const).map(tab => <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-current={activeTab === tab ? 'page' : undefined} className={`relative shrink-0 pb-3 ${activeTab === tab ? 'text-white' : 'text-[#8E8E94] hover:text-white'}`}>
-          {tab}{activeTab === tab && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full" style={{ backgroundColor: BLUE }} />}
-        </button>)}
-      </nav>
+        <section className="min-w-0 px-4 py-5 sm:px-6 xl:px-7">
+          <nav aria-label="Secciones de la ficha" className="mb-5 flex gap-1 overflow-x-auto border-b border-[#147BC1]/50 pb-2">
+            {([
+              ['Entrenamiento', Dumbbell], ['Nutrición', Apple], ['Progreso', ChartNoAxesCombined], ['Seguimiento', ClipboardList], ['Informes', FileText],
+            ] as const).map(([tab, Icon]) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} aria-current={activeTab === tab ? 'page' : undefined} className={`flex shrink-0 items-center gap-2 rounded-t-md border-b-2 px-3 py-2 text-[11px] font-semibold transition ${activeTab === tab ? 'border-[#28B9FF] bg-[#10263A] text-white' : 'border-transparent text-[#8EA5B7] hover:text-white'}`}>
+              <Icon className="h-3.5 w-3.5" />{tab}
+            </button>)}
+          </nav>
+          {(assignmentError || assignmentMessage) && <p role={assignmentError ? 'alert' : 'status'} className={`mb-4 rounded-md border px-3 py-2 text-xs ${assignmentError ? 'border-red-400/30 bg-red-950/30 text-red-200' : 'border-[#2D8EAF]/40 bg-[#0D2939] text-sky-100'}`}>{assignmentError || assignmentMessage}</p>}
 
-      {activeTab === 'Resumen' && <>
-        <TrainerClientProfilePanel client={client} />
-        <ClientPathologiesSummary pathologies={client.pathologies} />
-        <div className="mt-7 grid gap-7 xl:grid-cols-2">
-          <CurrentTrainingPlan
-            status={assignmentStatus}
-            error={assignmentError}
-            assignment={activeAssignment}
-            programName={activeProgram?.name || null}
-            programs={programs}
-            selectedProgramId={selectedProgramId}
-            onSelectProgram={setSelectedProgramId}
-            onApply={() => void handleApplyProgram()}
-            onEdit={activeProgram ? () => onEditProgram(activeProgram.id) : undefined}
-            applying={isApplying}
-          />
-          <CurrentNutritionPlan status={nutritionStatus} plan={nutritionPlan} onEdit={() => onEditNutrition(client.id)} />
-        </div>
-      </>}
-
-      {activeTab === 'Entrenamiento' && <WorkoutHistory status={workoutHistoryStatus} entries={workoutHistory} onRetry={() => {
+      {activeTab === 'Entrenamiento' && <div className="space-y-5">
+        <CurrentTrainingPlan
+          status={assignmentStatus}
+          error={assignmentError}
+          assignment={activeAssignment}
+          programName={activeProgram?.name || null}
+          programs={programs}
+          selectedProgramId={selectedProgramId}
+          onSelectProgram={setSelectedProgramId}
+          onApply={() => void handleApplyProgram()}
+          onEdit={activeProgram ? () => onEditProgram(activeProgram.id) : undefined}
+          applying={isApplying}
+        />
+        <WorkoutHistory status={workoutHistoryStatus} entries={workoutHistory} onRetry={() => {
         setWorkoutHistoryStatus('loading');
         void supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
           setWorkoutHistory(error || !data ? [] : data);
           setWorkoutHistoryStatus(error || !data ? 'error' : 'loaded');
         });
-      }} />}
+        }} />
+      </div>}
 
       {activeTab === 'Nutrición' && <div className="space-y-6">
         <CurrentNutritionPlan status={nutritionStatus} plan={nutritionPlan} onEdit={() => onEditNutrition(client.id)} />
         <TrainerNutritionLogHistory clientId={client.id} />
       </div>}
 
-      {activeTab === 'Progreso' && <section className="rounded-[20px] border border-[#303740] bg-[#15191E] p-6 sm:p-8">
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: BLUE }}>Evolución documentada</p>
-        <h2 className="mt-2 font-display text-xl font-semibold text-white">Datos reales, sin métricas estimadas</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#A0A0A8]">Los registros de peso disponibles aparecen en el perfil. Las sesiones y exposiciones de fuerza registradas se consultan en Entrenamiento. Esta fase no calcula tendencias ni resultados agregados.</p>
-      </section>}
-    </main>
+      {activeTab === 'Progreso' && <div className="space-y-5">
+        <section className="border-l-2 border-[#28B9FF] bg-[#0B1928] px-4 py-3"><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#48BDF2]">Progreso documentado</p><p className="mt-1 text-xs text-[#B2C3D1]">Se muestran únicamente registros disponibles; no se estiman tendencias ni resultados.</p></section>
+        <TrainerClientProfilePanel client={client} variant="full" />
+        <WorkoutHistory status={workoutHistoryStatus} entries={workoutHistory} onRetry={() => {
+          setWorkoutHistoryStatus('loading');
+          void supabaseDb.getTrainerWorkoutHistory(client.id).then(({ data, error }) => {
+            setWorkoutHistory(error || !data ? [] : data);
+            setWorkoutHistoryStatus(error || !data ? 'error' : 'loaded');
+          });
+        }} />
+      </div>}
+
+      {activeTab === 'Seguimiento' && <div className="space-y-5">
+        <section className="border-l-2 border-[#28B9FF] bg-[#0B1928] px-4 py-3"><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#48BDF2]">Contexto del cliente</p><p className="mt-1 text-xs text-[#B2C3D1]">Declaraciones disponibles en el perfil, sin interpretación clínica.</p></section>
+        <TrainerClientProfilePanel client={client} variant="full" />
+        <section className="rounded-md border border-[#24445D] bg-[#0B1928] p-4"><h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#99AFC0]">Información previa del perfil</h2><ClientPathologiesSummary pathologies={client.pathologies} /></section>
+      </div>}
+
+      {activeTab === 'Informes' && <section className="max-w-2xl border border-[#24445D] bg-[#0B1928] p-5 sm:p-7"><p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#48BDF2]">Exportación disponible</p><h2 className="mt-2 font-display text-xl font-semibold text-white">Informes y datos</h2><p className="mt-2 text-sm leading-relaxed text-[#A9BBC9]">La aplicación dispone de una exportación general de clientes y metadatos de programas. No existe todavía un informe profesional imprimible por cliente.</p><button type="button" onClick={onOpenReports} className="mt-5 rounded-md border border-[#2A9BCE] bg-[#0C2B40] px-4 py-2.5 text-xs font-semibold text-[#DFF6FF] transition hover:bg-[#10405D]">Abrir exportación existente</button></section>}
+        </section>
+
+        <aside aria-label="Herramientas de la sección" className="border-t border-[#147BC1]/50 bg-[#0A1725] p-4 xl:sticky xl:top-0 xl:h-[calc(100vh-4rem)] xl:border-l xl:border-t-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#7893A7]">Herramientas</p>
+          <h2 className="mt-1 text-sm font-semibold text-white">{activeTab}</h2>
+          <div className="mt-4 space-y-3">
+            {activeTab === 'Entrenamiento' && <>
+              <ContextAction title="Programa vigente" detail={assignmentStatus === 'loading' ? 'Consultando asignación…' : assignmentStatus === 'error' ? 'No se pudo consultar la asignación.' : activeAssignment ? (activeProgram?.name || 'Programa asignado') : 'Sin asignación activa'} />
+              {activeProgram && <button type="button" onClick={() => onEditProgram(activeProgram.id)} className="w-full rounded-md border border-[#24516D] px-3 py-2 text-left text-xs font-semibold text-[#D7E8F4] hover:border-[#45BFFF]">Editar programa</button>}
+            </>}
+            {activeTab === 'Nutrición' && <>
+              <ContextAction title="Prescripción vigente" detail={nutritionStatus === 'loading' ? 'Consultando asignación…' : nutritionStatus === 'error' ? 'No se pudo consultar la asignación.' : nutritionPlan?.snapshot.plan_name || 'Sin prescripción activa'} />
+              <button type="button" onClick={() => onEditNutrition(client.id)} className="w-full rounded-md border border-[#24516D] px-3 py-2 text-left text-xs font-semibold text-[#D7E8F4] hover:border-[#45BFFF]">Abrir planificación nutricional</button>
+            </>}
+            {activeTab === 'Progreso' && <ContextAction title="Fuentes" detail="Registros de peso y sesiones guardadas." />}
+            {activeTab === 'Seguimiento' && <ContextAction title="Lectura" detail="Perfil canónico y antecedente legacy identificado como potencialmente desactualizado." />}
+            {activeTab === 'Informes' && <ContextAction title="Disponible" detail="Exportación general existente. Informe individual imprimible todavía no disponible." />}
+          </div>
+          <div className="mt-6 border-t border-[#183B55] pt-4"><p className="text-[10px] leading-relaxed text-[#7893A7]">Sin catálogos ni métricas simuladas. Las acciones se limitan a las capacidades existentes.</p></div>
+        </aside>
+      </div>
+    </div>
   );
 };
+
+function ContextAction({ title, detail }: { title: string; detail: string }) {
+  return <div className="border-l-2 border-[#1D8FC4] bg-[#0D2031] px-3 py-2.5"><p className="text-[9px] font-bold uppercase tracking-wider text-[#7893A7]">{title}</p><p className="mt-1 text-xs leading-relaxed text-[#D5E2EC]">{detail}</p></div>;
+}
 
 function CurrentTrainingPlan({ status, error, assignment, programName, programs, selectedProgramId, onSelectProgram, onApply, onEdit, applying }: {
   status: 'loading' | 'loaded' | 'error'; error: string | null; assignment: any; programName: string | null;

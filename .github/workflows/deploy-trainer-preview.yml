@@ -1,0 +1,85 @@
+name: Deploy Trainer workstation preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: trainer-workstation-preview
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    # This workflow always builds the reviewed workstation branch, regardless
+    # of which branch is selected when dispatching it from GitHub Actions.
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: https://trainer-workstation-phase1.s-trainerapp-production.pages.dev
+    steps:
+      - name: Checkout workstation branch
+        uses: actions/checkout@v4
+        with:
+          ref: trainer-workstation-phase1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: bun run lint
+
+      - name: Regression tests
+        run: bun run test
+
+      - name: Verify preview environment
+        env:
+          PREVIEW_SUPABASE_URL: ${{ vars.PREVIEW_SUPABASE_URL }}
+          PREVIEW_SUPABASE_PUBLISHABLE_KEY: ${{ vars.PREVIEW_SUPABASE_PUBLISHABLE_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$PREVIEW_SUPABASE_URL" = "https://rfxyisqvrukslnlgzzek.supabase.co" || {
+            echo "Preview must use the approved production Supabase project." >&2
+            exit 1
+          }
+          test -n "$PREVIEW_SUPABASE_PUBLISHABLE_KEY" || {
+            echo "Missing PREVIEW_SUPABASE_PUBLISHABLE_KEY in GitHub preview environment." >&2
+            exit 1
+          }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || {
+            echo "Missing CLOUDFLARE_ACCOUNT_ID in GitHub preview environment." >&2
+            exit 1
+          }
+          test -n "$CLOUDFLARE_API_TOKEN" || {
+            echo "Missing CLOUDFLARE_API_TOKEN in GitHub preview environment." >&2
+            exit 1
+          }
+
+      - name: Build preview frontend
+        env:
+          VITE_APP_TARGET: production
+          VITE_BASE_PATH: /
+          VITE_SUPABASE_URL: ${{ vars.PREVIEW_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.PREVIEW_SUPABASE_PUBLISHABLE_KEY }}
+        run: bun run build
+
+      - name: Record source revision
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy branch preview to the existing Pages project
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy dist --project-name=s-trainerapp-production --branch=trainer-workstation-phase1 --commit-hash=${{ steps.source.outputs.sha }}

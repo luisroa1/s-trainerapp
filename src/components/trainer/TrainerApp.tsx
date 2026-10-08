@@ -489,6 +489,7 @@ export const TrainerApp: React.FC = () => {
               onBack={() => setActiveSection('dashboard')}
               onEditProgram={handleEditProgram}
               onEditNutrition={handleEditNutrition}
+              onOpenReports={() => setActiveSection('export')}
             />
           ) : (
             <div className="p-8 max-w-[1240px] mx-auto text-center py-20">

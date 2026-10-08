@@ -5,6 +5,7 @@ import { buildTrainerClientProfile } from '../../lib/trainerClientProfile.mjs';
 
 interface TrainerClientProfilePanelProps {
   client: ClientData;
+  variant?: 'full' | 'rail';
 }
 
 type ProfileSnapshot = {
@@ -26,7 +27,7 @@ const displayDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? 'Fecha no disponible' : new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(date);
 };
 
-export const TrainerClientProfilePanel: React.FC<TrainerClientProfilePanelProps> = ({ client }) => {
+export const TrainerClientProfilePanel: React.FC<TrainerClientProfilePanelProps> = ({ client, variant = 'full' }) => {
   const [snapshot, setSnapshot] = useState<ProfileSnapshot | null>(null);
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [reload, setReload] = useState(0);
@@ -54,6 +55,22 @@ export const TrainerClientProfilePanel: React.FC<TrainerClientProfilePanelProps>
 
   const age = profile?.personal.find(([label]) => label === 'Edad')?.[1] || 'No indicado';
   const primaryGoal = profile?.goals.find(([label]) => label === 'Principal')?.[1] || 'No indicado';
+
+  if (variant === 'rail') {
+    return (
+      <section aria-label="Resumen del perfil canónico" className="border-y border-[#183B55] py-3">
+        {status === 'loading' && <p role="status" className="py-3 text-xs text-[#91A8BA]">Cargando datos esenciales…</p>}
+        {status === 'error' && <div role="alert" className="py-3"><p className="text-xs text-red-200">No se pudo consultar el perfil canónico.</p><button type="button" onClick={() => setReload(value => value + 1)} className="mt-2 text-[10px] font-semibold text-[#5CD6FF] underline">Reintentar</button></div>}
+        {profile && snapshot && <dl className="space-y-3">
+          <RailRow label="Edad" value={age} />
+          <RailRow label="Objetivo principal" value={primaryGoal} />
+          <RailRow label="Último peso" value={profile.personal.find(([label]) => label === 'Último peso')?.[1] || 'No indicado'} />
+          <RailRow label="Fecha del registro" value={profile.personal.find(([label]) => label === 'Fecha del peso')?.[1] || 'No indicado'} />
+          <RailRow label="Disponibilidad" value={profile.availability.map(([label, value]) => `${label}: ${value}`).join(' · ')} />
+        </dl>}
+      </section>
+    );
+  }
 
   return (
     <section aria-labelledby="canonical-client-profile-title" className="mb-7 overflow-hidden rounded-[24px] border border-[#303740] bg-[#15191E]">
@@ -135,6 +152,10 @@ export const TrainerClientProfilePanel: React.FC<TrainerClientProfilePanelProps>
     </section>
   );
 };
+
+const RailRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div><dt className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#718A9E]">{label}</dt><dd className="mt-0.5 break-words text-xs leading-relaxed text-[#E0EAF2]">{value}</dd></div>
+);
 
 const ProfileSection: React.FC<{ title: string; rows: [string, string][] }> = ({ title, rows }) => (
   <section className="border-b border-[#303740]/70 py-5">

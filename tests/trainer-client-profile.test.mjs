@@ -53,7 +53,8 @@ test('Trainer adapter batches only existing Trainer-readable canonical profile t
   assert.match(method, /measured_on.*ascending: false/);
   assert.match(method, /getCurrentHealthDeclaration/);
   assert.doesNotMatch(panel, /\.insert\(|\.upsert\(|\.update\(|\.delete\(/);
-  assert.match(detail, /<TrainerClientProfilePanel client=\{client\} \/>/);
+  assert.match(detail, /<TrainerClientProfilePanel client=\{client\} variant="rail" \/>/);
+  assert.match(detail, /<TrainerClientProfilePanel client=\{client\} variant="full" \/>/);
 });
 
 test('Trainer detail uses canonical active nutrition and versioned training assignment reads', () => {
@@ -71,9 +72,11 @@ test('Trainer detail uses canonical active nutrition and versioned training assi
 
 test('Trainer detail does not expose simulated messaging, note entry, or empty tabs', () => {
   assert.doesNotMatch(detail, /showMessageModal|chatHistory|handleSendMessage|NOTAS DEL ENTRENADOR|newNoteText/);
-  assert.match(detail, /'Resumen', 'Entrenamiento', 'Nutrición', 'Progreso'/);
+  assert.match(detail, /'Entrenamiento'.*'Nutrición'.*'Progreso'.*'Seguimiento'.*'Informes'/s);
   assert.doesNotMatch(detail, /'Peso', 'Medidas', 'Fuerza', 'Actividad', 'Fotos', 'Notas'/);
-  assert.match(detail, /sm:px-7 lg:px-10/);
+  assert.match(detail, /xl:grid-cols-\[250px_minmax\(0,1fr\)_220px\]/);
+  assert.match(detail, /xl:sticky/);
+  assert.match(detail, /Herramientas/);
   assert.match(panel, /sm:flex-row/);
 });
 

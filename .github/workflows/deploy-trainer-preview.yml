@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: preview
-      url: https://trainer-workstation-phase1.s-trainerapp-production.pages.dev
     steps:
       - name: Checkout workstation branch
         uses: actions/checkout@v4

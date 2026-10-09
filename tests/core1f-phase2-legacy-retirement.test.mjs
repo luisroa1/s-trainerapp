@@ -53,7 +53,10 @@ test('Dashboard omits legacy adherence, next workout, alerts, weight, and check-
     assert.doesNotMatch(dashboard, new RegExp(claim, 'i'));
   }
   assert.doesNotMatch(dashboard, /adherencePercentage|nextWorkout|currentWeight|lastCheckIn|client\.alert/);
-  assert.match(dashboard, /clientes activos/);
+  assert.match(dashboard, /Sin clientes todavía/);
+  assert.match(dashboard, /clientListStatus === 'loading'/);
+  assert.match(dashboard, /clientListStatus === 'error'/);
+  assert.match(dashboard, /clientListStatus === 'loaded' && clients\.length === 0/);
 });
 
 test('Assistant presents availability only and contains no prefabricated analytics or conversation', () => {

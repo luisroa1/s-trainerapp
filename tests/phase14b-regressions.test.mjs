@@ -154,3 +154,21 @@ test('successful trainer invitation refreshes existing clients without a second 
   });
   assert.deepEqual(failedCalls, []);
 });
+
+test('read-only preview opens the existing invitation form but cannot invoke invite-client', () => {
+  const app = readFileSync(new URL('../src/components/trainer/TrainerApp.tsx', import.meta.url), 'utf8');
+  const invite = readFileSync(new URL('../src/components/trainer/TrainerInvite.tsx', import.meta.url), 'utf8');
+
+  assert.match(app, /onOpenInvite=\{\(\) => setActiveSection\('invite'\)\}/);
+  assert.match(app, /<TrainerInvite readOnly=\{IS_READ_ONLY_PREVIEW\}/);
+  assert.match(invite, /if \(readOnly\) \{[\s\S]*?setErrorMessage\('El envío está desactivado en esta vista previa de solo lectura\.'\);[\s\S]*?return;/);
+  assert.ok(invite.indexOf('if (readOnly)') < invite.indexOf('const { data, error } = await invokeInviteAndRefreshClients('));
+  assert.match(invite, /disabled=\{isLoading \|\| readOnly\}/);
+  assert.match(invite, /Vista previa de solo lectura: puedes revisar el formulario, pero no se enviarán invitaciones\./);
+  assert.match(invite, /La invitación no se enviará desde esta vista previa\./);
+  assert.match(invite, /role="alert"[\s\S]*?errorMessage/);
+  assert.match(invite, /setErrorMessage\(displayError\)/);
+  assert.match(invite, /setErrorMessage\(data\.error\)/);
+  assert.match(invite, /setErrorMessage\(err\.message/);
+  assert.match(invite, /invokeInviteAndRefreshClients\([\s\S]*?supabase\.functions\.invoke\('invite-client'/);
+});

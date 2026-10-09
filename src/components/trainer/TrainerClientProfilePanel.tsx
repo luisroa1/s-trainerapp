@@ -5,7 +5,7 @@ import { buildTrainerClientProfile } from '../../lib/trainerClientProfile.mjs';
 
 interface TrainerClientProfilePanelProps {
   client: ClientData;
-  variant?: 'full' | 'rail';
+  variant?: 'full' | 'rail' | 'progress' | 'health';
 }
 
 type ProfileSnapshot = {
@@ -57,17 +57,64 @@ export const TrainerClientProfilePanel: React.FC<TrainerClientProfilePanelProps>
   const primaryGoal = profile?.goals.find(([label]) => label === 'Principal')?.[1] || 'No indicado';
 
   if (variant === 'rail') {
+    const essentialRows: [string, string][] = [
+      ['Edad', age],
+      ['Objetivo principal', primaryGoal],
+      ['Último peso', profile?.personal.find(([label]) => label === 'Último peso')?.[1] || 'No indicado'],
+      ['Fecha del peso', profile?.personal.find(([label]) => label === 'Fecha del peso')?.[1] || 'No indicado'],
+      ['Altura', profile?.personal.find(([label]) => label === 'Altura')?.[1] || 'No indicado'],
+      ['Disponibilidad', profile?.availability.find(([label]) => label === 'Días semanales')?.[1] || 'No indicado'],
+    ];
     return (
-      <section aria-label="Resumen del perfil canónico" className="border-y border-[#183B55] py-3">
+      <section aria-label="Resumen esencial del cliente" className="border-t border-[#087CA8]/45 pt-4">
         {status === 'loading' && <p role="status" className="py-3 text-xs text-[#91A8BA]">Cargando datos esenciales…</p>}
         {status === 'error' && <div role="alert" className="py-3"><p className="text-xs text-red-200">No se pudo consultar el perfil canónico.</p><button type="button" onClick={() => setReload(value => value + 1)} className="mt-2 text-[10px] font-semibold text-[#5CD6FF] underline">Reintentar</button></div>}
-        {profile && snapshot && <dl className="space-y-3">
-          <RailRow label="Edad" value={age} />
-          <RailRow label="Objetivo principal" value={primaryGoal} />
-          <RailRow label="Último peso" value={profile.personal.find(([label]) => label === 'Último peso')?.[1] || 'No indicado'} />
-          <RailRow label="Fecha del registro" value={profile.personal.find(([label]) => label === 'Fecha del peso')?.[1] || 'No indicado'} />
-          <RailRow label="Disponibilidad" value={profile.availability.map(([label, value]) => `${label}: ${value}`).join(' · ')} />
-        </dl>}
+        {profile && snapshot && <RailSection title="Resumen" rows={essentialRows} />}
+      </section>
+    );
+  }
+
+  if (variant === 'health') {
+    const followUpRows: [string, string][] = [
+      ['Nombre preferido', profile?.personal.find(([label]) => label === 'Nombre preferido')?.[1] || 'No indicado'],
+      ['Sexo declarado', profile?.personal.find(([label]) => label === 'Sexo declarado')?.[1] || 'No indicado'],
+      ['Objetivos secundarios', profile?.goals.find(([label]) => label === 'Secundarios')?.[1] || 'No indicado'],
+      ...(profile?.activity || []),
+      ...(profile?.experience || []),
+      ['Lugar de entrenamiento', profile?.availability.find(([label]) => label === 'Lugar de entrenamiento')?.[1] || 'No indicado'],
+    ];
+    return (
+      <section aria-labelledby="canonical-health-declaration-title" className="space-y-5 border-b border-[#087CA8]/55 pb-5">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-white">Contexto del cliente</h2>
+          <p className="mt-1 text-xs text-[#91A8BA]">Información disponible en el perfil canónico</p>
+        </div>
+        {status === 'loading' && <p role="status" className="py-5 text-sm text-[#91A8BA]">Cargando declaración…</p>}
+        {status === 'error' && <div role="alert" className="py-4"><p className="text-sm text-red-200">No se pudo consultar la declaración de salud.</p><button type="button" onClick={() => setReload(value => value + 1)} className="mt-2 text-xs font-semibold text-[#5CD6FF] underline">Reintentar</button></div>}
+        {status === 'loaded' && profile && <>
+          <ProfileSection title="Datos adicionales" rows={followUpRows} />
+          <div>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 id="canonical-health-declaration-title" className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#A0A0A8]">Salud · declaración inicial</h3>
+              <span className="text-[10px] text-[#91A8BA]">Declaración del cliente · sin interpretación clínica</span>
+            </div>
+            <p className="whitespace-pre-wrap py-4 text-sm leading-relaxed text-[#D7E3EC]">{profile.health}</p>
+          </div>
+        </>}
+      </section>
+    );
+  }
+
+  if (variant === 'progress') {
+    return (
+      <section aria-labelledby="documented-weight-history-title" className="border-b border-[#087CA8]/55 pb-5">
+        <h2 id="documented-weight-history-title" className="font-display text-lg font-semibold text-white">Evolución documentada</h2>
+        <p className="mt-1 text-xs text-[#91A8BA]">Peso registrado</p>
+        {status === 'loading' && <p role="status" className="py-6 text-sm text-[#91A8BA]">Cargando registros de peso…</p>}
+        {status === 'error' && <div role="alert" className="py-5"><p className="text-sm text-red-200">No se pudo consultar el historial del perfil.</p><button type="button" onClick={() => setReload(value => value + 1)} className="mt-2 text-xs font-semibold text-[#5CD6FF] underline">Reintentar</button></div>}
+        {status === 'loaded' && profile && snapshot && (snapshot.weightRecords.length === 0
+          ? <p className="py-6 text-sm text-[#A0A0A8]">Todavía no hay registros de peso.</p>
+          : <ol className="mt-3 grid gap-x-8 sm:grid-cols-2">{snapshot.weightRecords.map((record, index) => <li key={`${record.measured_on}-${record.recorded_at}-${index}`} className="flex items-baseline justify-between gap-3 border-b border-[#183B55] py-3"><time className="text-xs text-[#A0A0A8]">{displayDate(record.measured_on)}</time><span className="font-display text-base font-semibold text-white">{displayWeight(record.weight_kg)}</span></li>)}</ol>)}
       </section>
     );
   }
@@ -155,6 +202,13 @@ export const TrainerClientProfilePanel: React.FC<TrainerClientProfilePanelProps>
 
 const RailRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div><dt className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#718A9E]">{label}</dt><dd className="mt-0.5 break-words text-xs leading-relaxed text-[#E0EAF2]">{value}</dd></div>
+);
+
+const RailSection: React.FC<{ title: string; rows: [string, string][] }> = ({ title, rows }) => (
+  <section className="border-b border-[#183B55] pb-3">
+    <h3 className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[#718A9E]">{title}</h3>
+    <dl className="space-y-2">{rows.map(([label, value]) => <RailRow key={label} label={label} value={value} />)}</dl>
+  </section>
 );
 
 const ProfileSection: React.FC<{ title: string; rows: [string, string][] }> = ({ title, rows }) => (

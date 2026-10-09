@@ -34,9 +34,15 @@ export interface ProgramWeekVolume {
   isDeload: boolean; // descarga automática (week 4 and 8)
 }
 
+export type ProgramIdentityKind = 'template' | 'client_specific' | 'unclassified';
+
 export interface Program {
   id: string;
   trainerId?: string;
+  /** NULL legacy rows map to unclassified and are never inferred from use. */
+  kind?: ProgramIdentityKind;
+  clientId?: string | null;
+  sourceTemplateId?: string | null;
   name: string;
   type: string; // Hipertrofia, Fuerza, Pérdida de grasa, Recomposición, etc.
   durationWeeks: number;

@@ -293,6 +293,9 @@ export const supabaseDb = {
       const programs = data.map(r => ({
         ...(r.data?.id ? r.data : { ...r, id: r.id }),
         trainerId: r.trainer_id,
+        kind: r.kind ?? 'unclassified',
+        clientId: r.client_id ?? null,
+        sourceTemplateId: r.source_template_id ?? null,
       })) as Program[];
       return { data: programs, error: null };
     } catch (err) {
@@ -312,16 +315,26 @@ export const supabaseDb = {
         data: program,
         updated_at: new Date().toISOString()
       };
+      // Preserve NULL identity for historical rows. New rows use the database
+      // default template identity; client-specific copies are created only by
+      // the idempotent server RPC.
+      if (program.kind && program.kind !== 'unclassified') payload.kind = program.kind;
+      if (program.kind === 'client_specific') {
+        payload.client_id = program.clientId;
+        payload.source_template_id = program.sourceTemplateId ?? null;
+      }
       // Solo incluir trainer_id si se pasa explícitamente (al crear nuevo programa)
       if (ownerId) {
         payload.trainer_id = ownerId;
       }
 
-      const { data, error } = await supabase
-        .from('programs')
-        .upsert(payload, { onConflict: 'id' })
-        .select('id')
-        .single();
+      // Never upsert an existing historical row: an omitted `kind` receives
+      // the new database default on the proposed insert row and could classify
+      // legacy data on conflict. Updates and new template inserts are separate.
+      const query = ownerId
+        ? supabase.from('programs').insert(payload)
+        : supabase.from('programs').update(payload).eq('id', program.id);
+      const { data, error } = await query.select('id').single();
       return { data, error };
     } catch (err) {
       return { data: null, error: err };
@@ -400,6 +413,29 @@ export const supabaseDb = {
       if (error) return { data: null, error };
       if (!data || typeof data !== 'object' || !Object.hasOwn(data, 'assignment')) {
         return { data: null, error: new Error('Supabase no confirmó la asignación.') };
+      }
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+
+  async copyProgramTemplateToClient(input: {
+    requestKey: string;
+    sourceTemplateId: string;
+    clientId: string;
+    programName: string;
+  }): Promise<{ data: { program_id: string; request_key: string; replayed: boolean } | null; error: any }> {
+    try {
+      const { data, error } = await supabase.rpc('copy_program_template_to_client', {
+        p_request_key: input.requestKey,
+        p_source_template_id: input.sourceTemplateId,
+        p_client_id: input.clientId,
+        p_program_name: input.programName,
+      });
+      if (error) return { data: null, error };
+      if (!data || typeof data.program_id !== 'string' || data.request_key !== input.requestKey || typeof data.replayed !== 'boolean') {
+        return { data: null, error: new Error('Supabase no confirmó la copia del programa.') };
       }
       return { data, error: null };
     } catch (error) {

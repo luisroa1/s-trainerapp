@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Send, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { supabase } from '../../lib/supabase';
+import { IS_READ_ONLY_PREVIEW, supabase } from '../../lib/supabase';
 import { getAppCallbackUrl } from '../../lib/appUrl';
 import { invokeInviteAndRefreshClients } from '../../lib/inviteClientFlow.mjs';
 
 interface TrainerInviteProps {
+  readOnly?: boolean;
   onBack: () => void;
   onSuccess: () => void;
 }
 
-export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess }) => {
+export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess, readOnly = IS_READ_ONLY_PREVIEW }) => {
   const { programs, appName, supabaseUser, userRole, refreshFromSupabase } = useApp();
   const trainerPrograms = programs.filter(program => program.trainerId === supabaseUser?.id);
   const [name, setName] = useState('');
@@ -24,6 +25,10 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) {
+      setErrorMessage('El envío está desactivado en esta vista previa de solo lectura.');
+      return;
+    }
     if (!name.trim()) {
       setErrorMessage('Por favor introduce el nombre del cliente.');
       return;
@@ -122,6 +127,12 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
         </h1>
       </div>
 
+      {readOnly && !sent && (
+        <div role="status" className="mb-4 rounded-xl border border-[#29343E] bg-[#111B23] px-4 py-3 text-sm text-[#A5B3C0]">
+          Vista previa de solo lectura: puedes revisar el formulario, pero no se enviarán invitaciones.
+        </div>
+      )}
+
       {sent ? (
         <div className="p-8 rounded-[20px] bg-[#16161A] border border-[var(--accent-color,#CFFF5C)] text-center animate-in fade-in">
           <div className="w-12 h-12 rounded-full bg-[var(--accent-color,#CFFF5C)] text-[#101012] flex items-center justify-center mx-auto mb-3">
@@ -136,7 +147,7 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
         <form onSubmit={handleSubmit} className="p-6 rounded-[20px] bg-[#16161A] border border-[#2A2A2F] space-y-4">
           {/* Error Banner */}
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-red-400 text-xs">
+            <div role="alert" className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-red-400 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <span className="font-bold block mb-0.5">No se pudo enviar la invitación</span>
@@ -217,7 +228,9 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
           </div>
 
           <div className="p-3 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#8E8E94]">
-            Tu cliente recibirá una invitación para acceder a {appName} y activar su cuenta con estos datos.
+            {readOnly
+              ? 'La invitación no se enviará desde esta vista previa.'
+              : `Tu cliente recibirá una invitación para acceder a ${appName} y activar su cuenta con estos datos.`}
           </div>
 
           {trainerPrograms.length === 0 && <div role="status" className="text-xs text-[#8E8E94]">Puedes invitar al cliente sin asignarle un programa todavía.</div>}
@@ -233,7 +246,9 @@ export const TrainerInvite: React.FC<TrainerInviteProps> = ({ onBack, onSuccess 
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || readOnly}
+              aria-disabled={isLoading || readOnly}
+              title={readOnly ? 'El envío está desactivado en esta vista previa' : undefined}
               style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
               className="px-7 py-3 rounded-full font-bold text-xs shadow-md flex items-center gap-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
             >

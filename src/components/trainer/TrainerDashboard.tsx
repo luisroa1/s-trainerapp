@@ -1,166 +1,138 @@
 import React, { useState } from 'react';
+import { ClientData, TrainerProfile } from '../../types';
 import { useApp } from '../../context/AppContext';
-import { Search, Plus } from 'lucide-react';
-import { ClientData } from '../../types';
+import { TrainerIcon, TrainerIconFrame } from '../common/TrainerVisualSystem';
 
 interface TrainerDashboardProps {
+  trainer: TrainerProfile;
   onSelectClient: (client: ClientData) => void;
   onOpenInvite: () => void;
+  onOpenPrograms: () => void;
+  onRetry: () => void;
+}
+
+const CLIENT_TOOLS = [
+  { icon: 'training', label: 'Entrenamiento', detail: 'Programación individual' },
+  { icon: 'nutrition', label: 'Nutrición', detail: 'Registros y seguimiento' },
+  { icon: 'progress', label: 'Progreso', detail: 'Evolución registrada' },
+  { icon: 'followup', label: 'Seguimiento', detail: 'Sesiones e historial' },
+  { icon: 'reports', label: 'Informes', detail: 'Consulta por cliente', wide: true },
+] as const;
+
+function greetingForHour(hour: number) {
+  if (hour < 12) return 'Buenos días';
+  if (hour < 20) return 'Buenas tardes';
+  return 'Buenas noches';
 }
 
 export const TrainerDashboard: React.FC<TrainerDashboardProps> = ({
+  trainer,
   onSelectClient,
-  onOpenInvite
+  onOpenInvite,
+  onOpenPrograms,
+  onRetry,
 }) => {
-  const { clients } = useApp();
+  const { clients, clientListStatus, clientListError } = useApp();
   const [search, setSearch] = useState('');
-
-  const filteredClients = clients.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.objective.toLowerCase().includes(search.toLowerCase())
+  const clientName = trainer.name?.trim();
+  const greeting = greetingForHour(new Date().getHours());
+  const filteredClients = clients.filter(client =>
+    client.name.toLowerCase().includes(search.toLowerCase()) ||
+    client.objective.toLowerCase().includes(search.toLowerCase())
   );
 
-  const activeCount = clients.filter(c => c.status === 'Activo').length;
-
   return (
-    <div className="p-8 max-w-[1240px] mx-auto">
-      {/* Header bar */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-extrabold font-display text-[#F5F4F0]">
-            Mis clientes
-          </h1>
-          <p className="text-xs text-[#8E8E94] mt-1">
-            {activeCount} clientes activos
-          </p>
-        </div>
+    <div className="trainer-dashboard-grid">
+      <main className="trainer-dashboard-main">
+        <h1 className="trainer-welcome font-display">
+          {greeting}{clientName ? `, ${clientName}` : ''}
+        </h1>
 
-        <div className="flex items-center gap-3">
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-[#8E8E94] absolute left-3.5 top-3" />
-            <input
-              type="text"
-              placeholder="Buscar cliente"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-2.5 rounded-[12px] bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] placeholder-[#5C5C62] w-56 focus:outline-none focus:border-[var(--accent-color,#CFFF5C)]"
-            />
-          </div>
-
-          {/* Add client button */}
-          <button
-            onClick={onOpenInvite}
-            style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-            className="px-5 py-2.5 rounded-full font-bold text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Añadir cliente</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="rounded-[16px] bg-[#16161A] border border-[#2A2A2F] overflow-hidden shadow-xl">
-        {filteredClients.length === 0 ? (
-          <div className="py-16 px-6 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center mx-auto mb-4 text-[#8E8E94]">
-              <Search className="w-5 h-5" />
+        <section aria-labelledby="trainer-clients-title" className="trainer-client-area">
+          <div className="trainer-client-heading">
+            <div>
+              <h2 id="trainer-clients-title" className="font-display">Mis clientes</h2>
+              {clientListStatus === 'loaded' && clients.length === 0 && <p>Sin clientes todavía.</p>}
+              {clientListStatus === 'loaded' && clients.length > 0 && <p>{clients.length} clientes</p>}
+              {clientListStatus === 'loading' && <p role="status">Cargando clientes…</p>}
+              {clientListStatus === 'error' && <p role="alert">{clientListError || 'No se pudo cargar la lista de clientes.'}</p>}
             </div>
-            <h3 className="text-base font-bold text-[#F5F4F0] mb-1">
-              {search ? 'No se encontraron clientes' : 'Aún no tienes clientes'}
-            </h3>
-            <p className="text-xs text-[#8E8E94] max-w-sm mx-auto mb-5">
-              {search 
-                ? 'Prueba con otro término de búsqueda o limpia el filtro.' 
-                : 'Invita a tu primer cliente para asignarle programas y dar seguimiento a su progreso.'}
-            </p>
-            {!search && (
-              <button
-                onClick={onOpenInvite}
-                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                <Plus className="w-4 h-4 stroke-[3]" />
-                <span>Invitar primer cliente</span>
-              </button>
+            {clientListStatus === 'loaded' && clients.length > 0 && (
+              <div className="trainer-client-actions">
+                <label className="sr-only" htmlFor="trainer-client-search">Buscar cliente</label>
+                <input
+                  id="trainer-client-search"
+                  type="search"
+                  placeholder="Buscar cliente"
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                />
+                <button className="trainer-button trainer-button-primary" onClick={onOpenInvite} type="button">Invitar cliente</button>
+              </div>
             )}
           </div>
-        ) : (
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-[#2A2A2F] text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider">
-              <th className="py-4 px-6">CLIENTE</th>
-              <th className="py-4 px-4">ESTADO</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#2A2A2F]/50 text-xs">
-            {filteredClients.map((client) => {
-              const isActivo = client.status === 'Activo';
-              const isPausado = client.status === 'Pausado';
 
-              return (
-                <tr
-                  key={client.id}
-                  onClick={() => onSelectClient(client)}
-                  className="hover:bg-[#1B1B1F] cursor-pointer transition-colors group"
-                >
-                  {/* CLIENTE */}
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-3">
-                      {client.avatarUrl ? (
-                        <img
-                          src={client.avatarUrl}
-                          alt={client.name}
-                          className="w-8 h-8 rounded-full object-cover border border-[#2A2A2F] group-hover:border-[var(--accent-color,#CFFF5C)] transition-colors shrink-0"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-bold text-xs text-[#F5F4F0] group-hover:border-[var(--accent-color,#CFFF5C)] transition-colors shrink-0">
-                          {client.initials}
-                        </div>
-                      )}
-                      <div>
-                        <span className="font-bold text-[#F5F4F0] block leading-tight">
-                          {client.name}
-                        </span>
-                        <span className="text-[11px] text-[#8E8E94]">
-                          {client.objective}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
+          {clientListStatus === 'loading' && <div className="trainer-state-panel" aria-hidden="true"><span className="trainer-loading-line" /><span className="trainer-loading-line trainer-loading-line-short" /></div>}
+          {clientListStatus === 'error' && (
+            <div className="trainer-state-panel trainer-error-panel">
+              <p>{clientListError || 'No se pudo cargar la lista de clientes.'}</p>
+              <button type="button" onClick={onRetry} className="trainer-button trainer-button-secondary">Reintentar</button>
+            </div>
+          )}
 
-                  {/* ESTADO */}
-                  <td className="py-4 px-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        isActivo
-                          ? 'bg-[#CFFF5C]/10 text-[#CFFF5C]'
-                          : isPausado
-                          ? 'bg-amber-500/10 text-amber-400'
-                          : 'bg-[#2A2A2F] text-[#8E8E94]'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isActivo
-                            ? 'bg-[#CFFF5C]'
-                            : isPausado
-                            ? 'bg-amber-400'
-                            : 'bg-[#8E8E94]'
-                        }`}
-                      />
-                      {client.status}
-                    </span>
-                  </td>
+          {clientListStatus === 'loaded' && clients.length === 0 && (
+            <div className="trainer-invite-card">
+              <TrainerIconFrame name="inviteClient" size={81} iconSize={58} />
+              <div className="trainer-invite-copy">
+                <h3 className="font-display">Invita a tu primer cliente</h3>
+                <p>Programa su entrenamiento y realiza el seguimiento desde su ficha.</p>
+              </div>
+              <button type="button" onClick={onOpenInvite} className="trainer-button trainer-button-primary trainer-invite-action">
+                <span>Invitar cliente</span><TrainerIcon name="arrowRight" size={23} />
+              </button>
+            </div>
+          )}
 
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        )}
-      </div>
+          {clientListStatus === 'loaded' && clients.length > 0 && (
+            <div className="trainer-client-list" aria-live="polite">
+              {filteredClients.length === 0 ? <p className="trainer-state-panel">No hay clientes que coincidan con la búsqueda.</p> : filteredClients.map(client => (
+                <button type="button" className="trainer-client-row" key={client.id} onClick={() => onSelectClient(client)}>
+                  {client.avatarUrl ? <img className="trainer-client-avatar" src={client.avatarUrl} alt="" /> : <span className="trainer-client-avatar trainer-client-initials">{client.initials}</span>}
+                  <span className="trainer-client-row-copy"><strong>{client.name}</strong><small>{client.objective || 'Objetivo no indicado'}</small></span>
+                  <span className={`trainer-status ${client.status === 'Activo' ? 'trainer-status-active' : ''}`}>{client.status}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section aria-labelledby="trainer-client-tools-title" className="trainer-client-tools">
+          <div className="trainer-section-heading">
+            <h2 id="trainer-client-tools-title" className="font-display">Herramientas del cliente</h2>
+            <p>Disponibles al abrir su ficha.</p>
+          </div>
+          <div className="trainer-tool-grid">
+            {CLIENT_TOOLS.map(tool => (
+              <article className={`trainer-tool-card ${'wide' in tool && tool.wide ? 'trainer-tool-card-wide' : ''}`} key={tool.label}>
+                <TrainerIconFrame name={tool.icon} />
+                <span><strong>{tool.label}</strong><small>{tool.detail}</small></span>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      <aside aria-labelledby="trainer-tools-title" className="trainer-tools-rail">
+        <h2 id="trainer-tools-title" className="font-display">Herramientas del entrenador</h2>
+        <section className="trainer-programs-card">
+          <div className="trainer-programs-card-heading">
+            <TrainerIconFrame name="programsCard" size={62} iconSize={48} />
+            <span><strong>Programas</strong><small>Plantillas reutilizables</small></span>
+          </div>
+          <button type="button" onClick={onOpenPrograms} className="trainer-text-action">Abrir programas <TrainerIcon name="arrowRight" size={21} /></button>
+        </section>
+        <p className="trainer-programs-note">Las plantillas pertenecen al entrenador. La programación se personaliza dentro de cada cliente.</p>
+      </aside>
     </div>
   );
 };

@@ -18,6 +18,7 @@ const INITIAL_TRAINER: TrainerProfile = {
 };
 
 export type SupabaseStatus = 'connected' | 'needs_tables' | 'error' | 'connecting';
+export type ClientListStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
 interface AppContextType {
   appName: string;
@@ -25,6 +26,8 @@ interface AppContextType {
   trainer: TrainerProfile;
   updateTrainer: (partial: Partial<TrainerProfile>) => void;
   clients: ClientData[];
+  clientListStatus: ClientListStatus;
+  clientListError: string | null;
   activeClient: ClientData;
   activeClientId: string;
   setActiveClientId: (id: string) => void;
@@ -44,6 +47,7 @@ interface AppContextType {
   addClient: (client: Partial<ClientData>) => void;
   addTrainerNote: (clientId: string, content: string) => void;
   saveProgram: (program: Program) => Promise<void>;
+  copyProgramTemplateToClient: (input: { requestKey: string; sourceTemplateId: string; clientId: string; programName: string }) => Promise<string>;
   applyProgramToClient: (clientId: string, programId: string | null) => Promise<any>;
   saveNutritionPlanDraft: (clientId: string, planId: string | null, snapshot: NutritionPlanSnapshot) => Promise<string>;
   applyNutritionPlan: (planId: string, requestKey: string) => Promise<any>;
@@ -117,6 +121,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [];
     }
   });
+  const [clientListStatus, setClientListStatus] = useState<ClientListStatus>('loading');
+  const [clientListError, setClientListError] = useState<string | null>(null);
 
   const [activeClientId, setActiveClientId] = useState<string>('');
   const [realClient, setRealClient] = useState<ClientData | null>(null);
@@ -296,15 +302,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     authenticatedRole = userRole,
     isCurrentAuthState: () => boolean = () => true
   ) => {
+    setClientListStatus('loading');
+    setClientListError(null);
     try {
       const health = await supabaseDb.testConnection();
       if (!isCurrentAuthState()) return;
       if (!health.connected) {
         setSupabaseStatus('error');
+        setClientListStatus('error');
+        setClientListError('No se pudo conectar con el servicio.');
         return;
       }
       if (!health.hasTables) {
         setSupabaseStatus('needs_tables');
+        setClientListStatus('error');
+        setClientListError('No se pudo cargar la lista de clientes.');
         return;
       }
 
@@ -317,8 +329,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Fetch Clients
       const clientsRes = await supabaseDb.getClients();
       if (!isCurrentAuthState()) return;
-      if (clientsRes.data) {
+      if (clientsRes.error || !clientsRes.data) {
+        setClientListStatus('error');
+        setClientListError('No se pudo cargar la lista de clientes.');
+      } else {
         setClients(clientsRes.data);
+        setClientListStatus('loaded');
         if (clientsRes.data.length > 0) {
           // Si el activeClientId no existe en la lista de clientes traída, tomar el primero
           setActiveClientId(prev => {
@@ -385,6 +401,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     } catch (e) {
       console.warn('Error refreshing from Supabase:', e);
+      setClientListStatus('error');
+      setClientListError('No se pudo cargar la lista de clientes.');
     }
   }, [clients, programs, supabaseUser?.id]);
 
@@ -594,6 +612,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAccountAccessError(null);
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
+        setClientListStatus('idle');
+        setClientListError(null);
       },
       onError: (error, isCurrent) => {
         if (!isMounted || !isCurrent()) return;
@@ -606,6 +626,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAccountAccessError(null);
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
+        setClientListStatus('error');
+        setClientListError('No se pudo verificar la sesión para cargar clientes.');
       },
       onSettled: () => {
         if (isMounted) setAuthLoading(false);
@@ -670,6 +692,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAccountAccessError(null);
         setProfileRoleStatus('idle');
         setProfileRoleError(null);
+        setClientListStatus('idle');
+        setClientListError(null);
         setTrainer(INITIAL_TRAINER);
         setRealClient(null);
         activeProgramOwnerId.current = null;
@@ -928,6 +952,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : [program, ...prev]);
   };
 
+  const copyProgramTemplateToClient = async (input: { requestKey: string; sourceTemplateId: string; clientId: string; programName: string }) => {
+    assertWritable('Copiar una plantilla a un Client');
+    if (userRole !== 'trainer' || !supabaseUser?.id || accountAccessStatus !== 'enabled') {
+      throw new Error('Solo un Trainer con acceso habilitado puede copiar una plantilla.');
+    }
+    const { data, error } = await supabaseDb.copyProgramTemplateToClient(input);
+    if (error) throw error;
+    if (!data?.program_id) throw new Error('Supabase no confirmó la copia de la plantilla.');
+    return data.program_id;
+  };
+
   const applyProgramToClient = async (clientId: string, programId: string | null) => {
     assertWritable('Aplicar o retirar un programa');
     if (userRole !== 'trainer' || accountAccessStatus !== 'enabled') {
@@ -975,7 +1010,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem('roafit_programs');
     localStorage.removeItem('roafit_nutrition');
     localStorage.removeItem('roafit_accent');
-    setClients([]);
+      setClients([]);
+      setClientListStatus('idle');
+      setClientListError(null);
     setPrograms([]);
     setNutritionPlans({});
     setActiveNutritionPlan(null);
@@ -993,6 +1030,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         trainer,
         updateTrainer,
         clients,
+        clientListStatus,
+        clientListError,
         activeClient,
         activeClientId,
         setActiveClientId,
@@ -1012,6 +1051,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addClient,
         addTrainerNote,
         saveProgram,
+        copyProgramTemplateToClient,
         applyProgramToClient,
         saveNutritionPlanDraft,
         applyNutritionPlan,

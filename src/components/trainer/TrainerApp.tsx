@@ -1,15 +1,5 @@
-import React, { useState } from 'react';
-import { 
-  Users, 
-  Dumbbell, 
-  BookOpen, 
-  Calendar, 
-  Download, 
-  MessageSquare, 
-  Sparkles, 
-  HelpCircle, 
-  LogOut 
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ClientData, Program } from '../../types';
 import { supabase, IS_READ_ONLY_PREVIEW } from '../../lib/supabase';
@@ -23,6 +13,7 @@ import { TrainerInvite } from './TrainerInvite';
 import { TrainerExport } from './TrainerExport';
 import { TrainerAssistant } from './TrainerAssistant';
 import { TrainerGuide } from './TrainerGuide';
+import { TrainerBrandMark, TrainerIcon } from '../common/TrainerVisualSystem';
 
 type TrainerNavSection =
   | 'dashboard'
@@ -38,28 +29,26 @@ type TrainerNavSection =
 
 export const TrainerApp: React.FC = () => {
   const { 
-    clients, 
+    refreshFromSupabase,
     programs, 
     setActiveClientId,
-    appName, 
     trainer, 
     updateTrainer, 
     supabaseUser, 
     userRole, 
-    isAdmin,
-    signOut, 
-    supabaseStatus,
-    isRealtimeActive
+    signOut
   } = useApp();
 
   // Navigation & Data State
   const [activeSection, setActiveSection] = useState<TrainerNavSection>('dashboard');
   const [selectedClient, setSelectedClient] = useState<ClientData | null>(null);
+  const [workstationTab, setWorkstationTab] = useState<'Entrenamiento' | 'Nutrición' | 'Progreso' | 'Seguimiento' | 'Informes'>('Entrenamiento');
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [nutritionClientId, setNutritionClientId] = useState<string>('');
 
   // Trainer profile editing state
   const [showTrainerModal, setShowTrainerModal] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [trainerName, setTrainerName] = useState(trainer.name);
   const [trainerRole, setTrainerRole] = useState(trainer.role || 'Entrenador');
   const [trainerAvatar, setTrainerAvatar] = useState(trainer.avatarUrl || '');
@@ -103,15 +92,10 @@ export const TrainerApp: React.FC = () => {
   };
 
   const handleSelectClient = (client: ClientData) => {
+    if (selectedClient?.id !== client.id) setWorkstationTab('Entrenamiento');
     setSelectedClient(client);
     setActiveClientId(client.id);
     setActiveSection('client_detail');
-  };
-
-  const handleEditProgram = (programId: string) => {
-    const prog = programs.find(p => p.id === programId) || null;
-    setSelectedProgram(prog);
-    setActiveSection('program_builder');
   };
 
   const handleEditNutrition = (clientId: string) => {
@@ -119,475 +103,163 @@ export const TrainerApp: React.FC = () => {
     setActiveSection('nutrition_builder');
   };
 
+  const isClientWorkstation = activeSection === 'client_detail' && selectedClient !== null;
+  const trainerInitials = trainer.initials?.trim() || trainer.name?.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '';
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountMenuOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [accountMenuOpen]);
+
   return (
-    <div className="flex w-full min-h-screen bg-[#101012] text-[#F5F4F0]">
-      {/* Fixed Sidebar (240px) */}
-      <aside className="w-60 shrink-0 bg-[#16161A] border-r border-[#2A2A2F] flex flex-col justify-between p-5 sticky top-0 h-screen select-none">
-        <div>
-          {/* Logo & Method tagline */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2.5 mb-2">
-              <div 
-                className="w-8 h-8 rounded-xl flex items-center justify-center p-1.5 shadow-sm"
-                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)' }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="#101012" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
-                  <path d="M4 17 L10 11 L14 15 L20 7" />
-                  <path d="M14 7 H20 V13" />
-                </svg>
-              </div>
-              <span className="font-extrabold font-display text-base tracking-wider text-[#F5F4F0]">
-                {appName}
+    <div className="trainer-app min-h-screen w-full">
+      {isClientWorkstation ? (
+        <main className="min-h-screen min-w-0 overflow-x-clip">
+          {IS_READ_ONLY_PREVIEW && <div role="status" className="trainer-readonly-banner">Vista previa de solo lectura</div>}
+          <TrainerClientDetail
+            client={selectedClient!}
+            onBack={() => setActiveSection('dashboard')}
+            trainer={trainer}
+            onSignOut={handleLogout}
+            activeTab={workstationTab}
+            onTabChange={setWorkstationTab}
+            onEditNutrition={handleEditNutrition}
+            onOpenReports={() => setActiveSection('export')}
+          />
+        </main>
+      ) : (
+        <>
+          <header className="trainer-global-header">
+            <div className="trainer-header-brand"><TrainerBrandMark /></div>
+            <div className="trainer-header-account">
+              <span className="trainer-notification-mark" aria-hidden="true">
+                <TrainerIcon name="notification" size={34} />
               </span>
-            </div>
-            <p className="text-[7.5px] tracking-widest text-[#8E8E94] font-bold uppercase leading-tight mb-3">
-              PLANIFICACIÓN · EJECUCIÓN · HISTORIAL
-            </p>
-            
-            {/* Supabase Status Pill */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#1B1B1F] border border-[#2A2A2F] text-[10px]">
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${isRealtimeActive ? 'bg-[#CFFF5C] animate-pulse' : 'bg-[#FFD34D]'}`} />
-                <span className="font-semibold text-[#F5F4F0]">Supabase Realtime</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="space-y-1">
-            <button
-              onClick={() => setActiveSection('dashboard')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                activeSection === 'dashboard' || activeSection === 'client_detail'
-                  ? 'bg-[#1B1B1F] text-[#F5F4F0] border border-[#2A2A2F]'
-                  : 'text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Clientes</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('programs')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                activeSection === 'programs' || activeSection === 'program_new' || activeSection === 'program_builder'
-                  ? 'bg-[#1B1B1F] text-[#F5F4F0] border border-[#2A2A2F]'
-                  : 'text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40'
-              }`}
-            >
-              <Dumbbell className="w-4 h-4" />
-              <span>Programas</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('programs')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40 transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Biblioteca</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('dashboard')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40 transition-colors"
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Calendario</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('export')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                activeSection === 'export'
-                  ? 'bg-[#1B1B1F] text-[#F5F4F0] border border-[#2A2A2F]'
-                  : 'text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40'
-              }`}
-            >
-              <Download className="w-4 h-4" />
-              <span>Informes</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (clients.length > 0) {
-                  setSelectedClient(clients[0]);
-                  setActiveSection('client_detail');
-                } else {
-                  setActiveSection('dashboard');
-                }
-              }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40 transition-colors"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>Mensajes</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('assistant')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                activeSection === 'assistant'
-                  ? 'bg-[#1B1B1F] text-[#F5F4F0] border border-[#2A2A2F]'
-                  : 'text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40'
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-[var(--accent-color,#CFFF5C)]" />
-              <span>Asistente</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSection('guide')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                activeSection === 'guide'
-                  ? 'bg-[#1B1B1F] text-[#F5F4F0] border border-[#2A2A2F]'
-                  : 'text-[#8E8E94] hover:text-[#F5F4F0] hover:bg-[#1B1B1F]/40'
-              }`}
-            >
-              <HelpCircle className="w-4 h-4" />
-              <span>Ayuda</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Bottom Trainer Profile Pill with Edit Modal Trigger & Sign Out */}
-        <div className="pt-4 border-t border-[#2A2A2F] flex flex-col gap-2">
-          <div 
-            onClick={() => {
-              if (IS_READ_ONLY_PREVIEW) return;
-              setTrainerName(trainer.name);
-              setTrainerRole(trainer.role);
-              setTrainerAvatar(trainer.avatarUrl || '');
-              setShowTrainerModal(true);
-            }}
-            className={`flex items-center justify-between ${IS_READ_ONLY_PREVIEW ? 'cursor-default' : 'cursor-pointer hover:bg-[#1B1B1F]/50'} group p-2 rounded-xl transition-colors`}
-            title={IS_READ_ONLY_PREVIEW ? 'Perfil de solo lectura' : 'Editar perfil y foto del entrenador'}
-          >
-            <div className="flex items-center gap-3 overflow-hidden">
-              <div className="relative shrink-0">
-                {trainer.avatarUrl ? (
-                  <img
-                    src={trainer.avatarUrl}
-                    alt={trainer.name}
-                    className="w-9 h-9 rounded-full object-cover border border-[#2A2A2F] group-hover:border-[var(--accent-color,#CFFF5C)] transition-colors"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-bold text-xs text-[#F5F4F0] group-hover:border-[var(--accent-color,#CFFF5C)] transition-colors">
-                    {trainer.initials || 'TR'}
-                  </div>
-                )}
-              </div>
-              <div className="overflow-hidden">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-xs text-[#F5F4F0] block leading-tight group-hover:text-[var(--accent-color,#CFFF5C)] transition-colors truncate">
-                    {trainer.name || 'Entrenador'}
-                  </span>
-                  {isAdmin && (
-                    <span className="px-1.5 py-0.5 rounded-md bg-[#FFD34D]/20 text-[#FFD34D] border border-[#FFD34D]/40 text-[8px] font-extrabold uppercase tracking-wider shrink-0">
-                      Admin
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] text-[#8E8E94] truncate block">
-                  {trainer.email || 'entrenador'}
-                </span>
-              </div>
-            </div>
-            {!IS_READ_ONLY_PREVIEW && <span className="text-[10px] text-[var(--accent-color,#CFFF5C)] opacity-0 group-hover:opacity-100 transition-opacity font-semibold shrink-0">Editar</span>}
-          </div>
-
-          {/* Visible Cerrar sesión button */}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-[#FF6B4A] bg-[#FF6B4A]/10 border border-[#FF6B4A]/20 hover:bg-[#FF6B4A]/20 hover:border-[#FF6B4A]/30 transition-all cursor-pointer"
-            title="Cerrar sesión de entrenador"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Cerrar sesión</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Trainer Profile & Photo Modal */}
-      {showTrainerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="w-full max-w-[400px] bg-[#16161A] border border-[#2A2A2F] rounded-[24px] p-6 shadow-2xl">
-            <h3 className="text-lg font-bold font-display text-[#F5F4F0] mb-4">
-              Perfil del Entrenador
-            </h3>
-
-            {/* Photo upload section */}
-            <div className="flex flex-col items-center mb-5">
-              <input
-                type="file"
-                accept="image/*"
-                ref={trainerFileInputRef}
-                onChange={handleTrainerPhotoUpload}
-                className="hidden"
-              />
-              <div 
-                onClick={() => trainerFileInputRef.current?.click()}
-                className="relative cursor-pointer group"
-              >
-                {trainerAvatar ? (
-                  <img
-                    src={trainerAvatar}
-                    alt={trainerName}
-                    className="w-20 h-20 rounded-full object-cover border-2 border-[var(--accent-color,#CFFF5C)] shadow-md"
-                  />
-                ) : (
-                  <div className="w-20 h-20 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-display font-extrabold text-xl text-[#F5F4F0] group-hover:border-[var(--accent-color,#CFFF5C)] transition-colors">
-                    {trainer.initials}
-                  </div>
-                )}
-                <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[var(--accent-color,#CFFF5C)] text-[#101012] flex items-center justify-center shadow-md">
-                  <Sparkles className="w-3.5 h-3.5 fill-current" />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 mt-2">
+              <div className="trainer-account-control">
                 <button
                   type="button"
-                  onClick={() => trainerFileInputRef.current?.click()}
-                  className="text-xs font-bold text-[var(--accent-color,#CFFF5C)] hover:underline"
+                  className="trainer-account-trigger"
+                  aria-label="Abrir menú de cuenta"
+                  aria-expanded={accountMenuOpen}
+                  aria-haspopup="true"
+                  onClick={() => setAccountMenuOpen(open => !open)}
                 >
-                  {trainerAvatar ? 'Cambiar foto' : 'Subir foto'}
+                  {trainer.avatarUrl ? <img src={trainer.avatarUrl} alt="" /> : <span>{trainerInitials}</span>}
                 </button>
-                {trainerAvatar && (
-                  <button
-                    type="button"
-                    onClick={() => setTrainerAvatar('')}
-                    className="text-xs text-[#8E8E94] hover:text-red-400"
-                  >
-                    Eliminar
-                  </button>
+                <button
+                  type="button"
+                  className="trainer-account-chevron"
+                  aria-label={accountMenuOpen ? 'Cerrar menú de cuenta' : 'Abrir menú de cuenta'}
+                  aria-expanded={accountMenuOpen}
+                  onClick={() => setAccountMenuOpen(open => !open)}
+                ><TrainerIcon name="chevronDown" size={22} /></button>
+                {accountMenuOpen && (
+                  <div className="trainer-account-menu" aria-label="Menú de cuenta">
+                    <div className="trainer-account-menu-identity">
+                      <strong>{trainer.name || 'Perfil del entrenador'}</strong>
+                      {trainer.email && <span>{trainer.email}</span>}
+                    </div>
+                    {!IS_READ_ONLY_PREVIEW && <button type="button" onClick={() => {
+                      setTrainerName(trainer.name);
+                      setTrainerRole(trainer.role || 'Entrenador');
+                      setTrainerAvatar(trainer.avatarUrl || '');
+                      setShowTrainerModal(true);
+                      setAccountMenuOpen(false);
+                    }}>Perfil del entrenador</button>}
+                    <button type="button" onClick={handleLogout}>Cerrar sesión</button>
+                  </div>
                 )}
               </div>
             </div>
+          </header>
 
-            {/* Fields */}
-            <div className="space-y-3 mb-6">
-              <div>
-                <label className="text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider block mb-1">
-                  Nombre del Entrenador
-                </label>
-                <input
-                  type="text"
-                  value={trainerName}
-                  onChange={e => setTrainerName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider block mb-1">
-                  Título / Rol
-                </label>
-                <input
-                  type="text"
-                  value={trainerRole}
-                  onChange={e => setTrainerRole(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs text-[#F5F4F0] focus:border-[var(--accent-color,#CFFF5C)] focus:outline-none"
-                />
-              </div>
-
-              {/* Supabase account card */}
-              <div className="p-3 rounded-xl bg-[#101012] border border-[#2A2A2F]">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-bold text-[#8E8E94] uppercase tracking-wider">
-                    Cuenta Supabase
-                  </span>
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#1B1B1F] text-[#CFFF5C] font-semibold border border-[#2A2A2F]">
-                    {userRole || 'Entrenador'}
-                  </span>
-                </div>
-                <div className="text-xs text-[#F5F4F0] truncate font-mono">
-                  {supabaseUser?.email || trainer.email}
-                </div>
-                {supabaseUser && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await signOut();
-                      setShowTrainerModal(false);
-                    }}
-                    className="mt-2 text-xs text-[#FF6B4A] hover:underline font-semibold cursor-pointer block"
-                  >
-                    Cerrar sesión de Supabase
+          <div className="trainer-global-layout">
+            <aside className="trainer-global-sidebar" aria-label="Navegación principal del entrenador">
+              <div className="trainer-sidebar-top">
+                <p className="trainer-sidebar-label">ESPACIO TRAINER</p>
+                <nav className="trainer-global-nav">
+                  <button type="button" aria-current={activeSection === 'dashboard' ? 'page' : undefined} onClick={() => setActiveSection('dashboard')} className={activeSection === 'dashboard' || activeSection === 'client_detail' ? 'active' : ''}>
+                    <TrainerIcon name="clients" size={33} /><span>Clientes</span>
                   </button>
-                )}
+                  <button type="button" aria-current={['programs', 'program_new', 'program_builder'].includes(activeSection) ? 'page' : undefined} onClick={() => setActiveSection('programs')} className={['programs', 'program_new', 'program_builder'].includes(activeSection) ? 'active' : ''}>
+                    <TrainerIcon name="programs" size={32} /><span>Programas</span>
+                  </button>
+                  <button type="button" className="unavailable" disabled aria-disabled="true" title="Biblioteca no disponible">
+                    <TrainerIcon name="library" size={32} /><span>Biblioteca</span>
+                  </button>
+                  <button type="button" className="unavailable" disabled aria-disabled="true" title="Agenda no disponible">
+                    <TrainerIcon name="agenda" size={32} /><span>Agenda</span>
+                  </button>
+                </nav>
               </div>
-            </div>
+              <div className="trainer-sidebar-bottom">
+                <button type="button" className={activeSection === 'guide' ? 'trainer-help-link active' : 'trainer-help-link'} onClick={() => setActiveSection('guide')}>
+                  <TrainerIcon name="help" size={32} /><span>Ayuda</span>
+                </button>
+                <div className="trainer-sidebar-profile" aria-label="Cuenta del entrenador">
+                  {trainer.avatarUrl ? <img src={trainer.avatarUrl} alt="" /> : <span className="trainer-sidebar-initials">{trainerInitials}</span>}
+                  <span className="trainer-sidebar-profile-copy"><strong>{trainer.name || 'Perfil del entrenador'}</strong><small>{trainer.role || 'Entrenador'}</small></span>
+                </div>
+              </div>
+            </aside>
 
-            {/* Action buttons */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTrainerModal(false)}
-                className="flex-1 py-2.5 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#8E8E94] hover:text-[#F5F4F0]"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveTrainerProfile}
-                style={{ backgroundColor: 'var(--accent-color, #CFFF5C)', color: 'var(--accent-text, #101012)' }}
-                className="flex-1 py-2.5 rounded-full font-bold text-xs shadow-md transition-transform active:scale-95"
-              >
-                Guardar cambios
-              </button>
-            </div>
+            <main className="trainer-global-main">
+              {IS_READ_ONLY_PREVIEW && <div role="status" className="trainer-readonly-banner">Vista previa de solo lectura</div>}
+              {activeSection === 'dashboard' && (
+                <TrainerDashboard
+                  trainer={trainer}
+                  onSelectClient={handleSelectClient}
+                  onOpenInvite={() => setActiveSection('invite')}
+                  onOpenPrograms={() => setActiveSection('programs')}
+                  onRetry={() => void refreshFromSupabase(supabaseUser?.id, userRole)}
+                />
+              )}
+              {activeSection === 'programs' && <TrainerPrograms onSelectProgram={prog => { setSelectedProgram(prog); setActiveSection('program_builder'); }} onCreateNewProgram={() => setActiveSection('program_new')} />}
+              {activeSection === 'program_new' && <TrainerProgramNew onBack={() => setActiveSection('programs')} onProceedToBuilder={cfg => {
+                setSelectedProgram({ id: globalThis.crypto.randomUUID(), name: cfg.name, type: cfg.objective, durationWeeks: cfg.durationWeeks, daysPerWeek: cfg.daysPerWeek, level: cfg.level, autoGenerated: false, assignedClientsCount: 0, weeksVolume: [], days: [] });
+                setActiveSection('program_builder');
+              }} />}
+              {activeSection === 'program_builder' && (selectedProgram ? <TrainerProgramBuilder program={selectedProgram} onBack={() => setActiveSection('programs')} onSave={() => setActiveSection('programs')} /> : <div className="trainer-route-empty">Ningún programa seleccionado para editar.</div>)}
+              {activeSection === 'nutrition_builder' && <TrainerNutritionBuilder clientId={nutritionClientId} onBack={() => setActiveSection(selectedClient ? 'client_detail' : 'dashboard')} onSave={() => setActiveSection(selectedClient ? 'client_detail' : 'dashboard')} />}
+              {activeSection === 'invite' && <TrainerInvite readOnly={IS_READ_ONLY_PREVIEW} onBack={() => setActiveSection('dashboard')} onSuccess={() => setActiveSection('dashboard')} />}
+              {activeSection === 'export' && <TrainerExport />}
+              {activeSection === 'assistant' && <TrainerAssistant />}
+              {activeSection === 'guide' && <TrainerGuide onNavigate={sec => setActiveSection(sec as TrainerNavSection)} />}
+            </main>
           </div>
-        </div>
+          {showTrainerModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+              <div className="w-full max-w-[400px] bg-[#16161A] border border-[#2A2A2F] rounded-[24px] p-6 shadow-2xl">
+                <h3 className="text-lg font-bold font-display text-[#F5F4F0] mb-4">Perfil del Entrenador</h3>
+                <div className="flex flex-col items-center mb-5">
+                  <input type="file" accept="image/*" ref={trainerFileInputRef} onChange={handleTrainerPhotoUpload} className="hidden" />
+                  <button type="button" onClick={() => trainerFileInputRef.current?.click()} className="relative cursor-pointer group" aria-label="Cambiar foto del entrenador">
+                    {trainerAvatar ? <img src={trainerAvatar} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-[var(--trainer-cyan)]" /> : <span className="w-20 h-20 rounded-full border border-[var(--trainer-border)] inline-flex items-center justify-center">{trainerInitials}</span>}
+                    <span className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[var(--trainer-cyan)] text-[#07141A] flex items-center justify-center"><Sparkles className="w-3.5 h-3.5" /></span>
+                  </button>
+                  <div className="flex items-center gap-3 mt-2">
+                    <button type="button" onClick={() => trainerFileInputRef.current?.click()} className="text-xs font-bold text-[var(--trainer-cyan)]">{trainerAvatar ? 'Cambiar foto' : 'Subir foto'}</button>
+                    {trainerAvatar && <button type="button" onClick={() => setTrainerAvatar('')} className="text-xs text-[var(--trainer-muted)]">Eliminar</button>}
+                  </div>
+                </div>
+                <div className="space-y-3 mb-6">
+                  <label className="block text-xs text-[var(--trainer-muted)]">Nombre del entrenador<input type="text" value={trainerName} onChange={e => setTrainerName(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--trainer-bg)] border border-[var(--trainer-border)] text-[var(--trainer-text)]" /></label>
+                  <label className="block text-xs text-[var(--trainer-muted)]">Título / Rol<input type="text" value={trainerRole} onChange={e => setTrainerRole(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-xl bg-[var(--trainer-bg)] border border-[var(--trainer-border)] text-[var(--trainer-text)]" /></label>
+                  <div className="rounded-xl border border-[var(--trainer-border)] p-3 text-xs"><div className="flex justify-between"><span>Cuenta</span><span>{userRole || 'Entrenador'}</span></div><div className="mt-1">{supabaseUser?.email || trainer.email}</div></div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowTrainerModal(false)} className="trainer-button trainer-button-secondary flex-1">Cancelar</button>
+                  <button type="button" onClick={handleSaveTrainerProfile} className="trainer-button trainer-button-primary flex-1">Guardar cambios</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
-
-      {/* Main Content Area */}
-      <main className="flex-1 min-w-0 overflow-y-auto">
-        {/* Header Bar with Trainer Name/Avatar and Admin Badge */}
-        <header className="h-14 border-b border-[#2A2A2F] bg-[#16161A]/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <div className="relative shrink-0">
-              {trainer.avatarUrl ? (
-                <img
-                  src={trainer.avatarUrl}
-                  alt={trainer.name}
-                  className="w-8 h-8 rounded-full object-cover border border-[#2A2A2F]"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[#1B1B1F] border border-[#2A2A2F] flex items-center justify-center font-bold text-xs text-[#F5F4F0]">
-                  {trainer.initials || 'TR'}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span className="font-bold text-xs text-[#F5F4F0]">
-                {trainer.name || 'Entrenador'}
-              </span>
-              {isAdmin && (
-                <span className="px-2.5 py-0.5 rounded-full bg-[#FFD34D]/20 text-[#FFD34D] border border-[#FFD34D]/40 text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#FFD34D] animate-pulse" />
-                  <span>Modo Administrador</span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-[#8E8E94]">
-            <span className="font-mono text-[11px] hidden sm:inline">{trainer.email}</span>
-          </div>
-        </header>
-
-        {IS_READ_ONLY_PREVIEW && (
-          <div role="status" className="sticky top-14 z-10 border-b border-cyan-400/40 bg-[#0A2433] px-6 py-2 text-center text-xs font-semibold text-cyan-100">
-            Vista previa de solo lectura · datos reales de producción · los cambios no se guardan
-          </div>
-        )}
-
-        {activeSection === 'dashboard' && (
-          <TrainerDashboard
-            onSelectClient={handleSelectClient}
-            onOpenInvite={() => { if (!IS_READ_ONLY_PREVIEW) setActiveSection('invite'); }}
-          />
-        )}
-
-        {activeSection === 'client_detail' && (
-          selectedClient ? (
-            <TrainerClientDetail
-              client={selectedClient}
-              onBack={() => setActiveSection('dashboard')}
-              onEditProgram={handleEditProgram}
-              onEditNutrition={handleEditNutrition}
-              onOpenReports={() => setActiveSection('export')}
-            />
-          ) : (
-            <div className="p-8 max-w-[1240px] mx-auto text-center py-20">
-              <p className="text-sm text-[#8E8E94]">Ningún cliente seleccionado.</p>
-              <button
-                onClick={() => setActiveSection('dashboard')}
-                className="mt-4 px-4 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] cursor-pointer"
-              >
-                Volver a la lista de clientes
-              </button>
-            </div>
-          )
-        )}
-
-        {activeSection === 'programs' && (
-          <TrainerPrograms
-            onSelectProgram={(prog) => {
-              setSelectedProgram(prog);
-              setActiveSection('program_builder');
-            }}
-            onCreateNewProgram={() => setActiveSection('program_new')}
-          />
-        )}
-
-        {activeSection === 'program_new' && (
-          <TrainerProgramNew
-            onBack={() => setActiveSection('programs')}
-            onProceedToBuilder={(cfg) => {
-              setSelectedProgram({
-                id: globalThis.crypto.randomUUID(),
-                name: cfg.name,
-                type: cfg.objective,
-                durationWeeks: cfg.durationWeeks,
-                daysPerWeek: cfg.daysPerWeek,
-                level: cfg.level,
-                autoGenerated: false,
-                assignedClientsCount: 0,
-                weeksVolume: [],
-                days: []
-              });
-              setActiveSection('program_builder');
-            }}
-          />
-        )}
-
-        {activeSection === 'program_builder' && (
-          selectedProgram ? (
-            <TrainerProgramBuilder
-              program={selectedProgram}
-              onBack={() => setActiveSection('programs')}
-              onSave={() => setActiveSection('programs')}
-            />
-          ) : (
-            <div className="p-8 max-w-[1240px] mx-auto text-center py-20">
-              <p className="text-sm text-[#8E8E94]">Ningún programa seleccionado para editar.</p>
-              <button
-                onClick={() => setActiveSection('programs')}
-                className="mt-4 px-4 py-2 rounded-xl bg-[#1B1B1F] border border-[#2A2A2F] text-xs font-bold text-[#F5F4F0] cursor-pointer"
-              >
-                Volver a la lista de programas
-              </button>
-            </div>
-          )
-        )}
-
-        {activeSection === 'nutrition_builder' && (
-          <TrainerNutritionBuilder
-            clientId={nutritionClientId}
-            onBack={() => setActiveSection('client_detail')}
-            onSave={() => setActiveSection('client_detail')}
-          />
-        )}
-
-        {activeSection === 'invite' && (
-          <TrainerInvite
-            onBack={() => setActiveSection('dashboard')}
-            onSuccess={() => setActiveSection('dashboard')}
-          />
-        )}
-
-        {activeSection === 'export' && (
-          <TrainerExport />
-        )}
-
-        {activeSection === 'assistant' && (
-          <TrainerAssistant />
-        )}
-
-        {activeSection === 'guide' && (
-          <TrainerGuide onNavigate={(sec) => setActiveSection(sec as TrainerNavSection)} />
-        )}
-      </main>
     </div>
   );
 };

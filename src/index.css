@@ -4,6 +4,19 @@
   --font-display: 'Bricolage Grotesque', sans-serif;
   --font-body: 'Manrope', sans-serif;
 
+  --color-trainer-bg: #080F14;
+  --color-trainer-panel: #111B23;
+  --color-trainer-border: #29343E;
+  --color-trainer-text: #E8EDF2;
+  --color-trainer-muted: #A5B3C0;
+  --color-trainer-cyan: #00BCE8;
+  --color-trainer-training: #00C9F4;
+  --color-trainer-nutrition: #00E575;
+  --color-trainer-progress: #00D5C5;
+  --color-trainer-followup: #DA49F5;
+  --color-trainer-gold: #FFD21F;
+  --color-trainer-neutral: #B9D2FF;
+
   --color-brand-bg: #101012;
   --color-card-bg: #1B1B1F;
   --color-card-secondary: #232328;
@@ -23,12 +36,292 @@
 }
 
 :root {
+  --trainer-bg: #080F14;
+  --trainer-panel: #111B23;
+  --trainer-border: #29343E;
+  --trainer-text: #E8EDF2;
+  --trainer-muted: #A5B3C0;
+  --trainer-cyan: #00BCE8;
+  --trainer-training: #00C9F4;
+  --trainer-nutrition: #00E575;
+  --trainer-progress: #00D5C5;
+  --trainer-followup: #DA49F5;
+  --trainer-gold: #FFD21F;
+  --trainer-neutral: #B9D2FF;
   --accent-color: #CFFF5C;
   --accent-text: #101012;
 }
 
+/* The Trainer workspace owns its approved visual system without changing the
+   Client application's existing theme preference. */
+.trainer-app {
+  --accent-color: var(--trainer-cyan);
+  --accent-text: #07141A;
+  background: var(--trainer-bg);
+  color: var(--trainer-text);
+  font-family: 'Manrope', sans-serif;
+}
+
+/* Bridge legacy Trainer screens to the common palette while they are reused. */
+.trainer-app [class*="bg-[#101012]"],
+.trainer-app [class*="bg-[#0B0B0D]"],
+.trainer-app [class*="bg-[#020A10]"],
+.trainer-app [class*="bg-[#06131D]"],
+.trainer-app [class*="bg-[#06141D]"],
+.trainer-app [class*="bg-[#030F16]"] { background-color: var(--trainer-bg) !important; }
+.trainer-app [class*="bg-[#16161A]"],
+.trainer-app [class*="bg-[#1B1B1F]"],
+.trainer-app [class*="bg-[#232328]"],
+.trainer-app [class*="bg-[#07131A]"],
+.trainer-app [class*="bg-[#0B1928]"],
+.trainer-app [class*="bg-[#07131A]"] { background-color: var(--trainer-panel) !important; }
+.trainer-app [class*="border-[#2A2A2F]"],
+.trainer-app [class*="border-[#3A3A40]"],
+.trainer-app [class*="border-[#087CA8]"],
+.trainer-app [class*="border-[#24445D]"],
+.trainer-app [class*="border-[#1B3A4F]"] { border-color: var(--trainer-border) !important; }
+.trainer-app [class*="text-[#F5F4F0]"] { color: var(--trainer-text) !important; }
+.trainer-app [class*="text-[#8E8E94]"],
+.trainer-app [class*="text-[#A0A0A8]"],
+.trainer-app [class*="text-[#C2C2C7]"],
+.trainer-app [class*="text-[#B9CFE0]"],
+.trainer-app [class*="text-[#B9CFE0]"],
+.trainer-app [class*="text-[#9FB4C4]"],
+.trainer-app [class*="text-[#A9BBC9]"],
+.trainer-app [class*="text-[#C2C2C7]"] { color: var(--trainer-muted) !important; }
+.trainer-app [class*="border-[var(--accent-color]"] { border-color: var(--trainer-cyan) !important; }
+.trainer-app .glow-accent,
+.trainer-app .glow-cyan { box-shadow: none !important; }
+
+.trainer-app :focus-visible {
+  outline: 2px solid var(--trainer-cyan);
+  outline-offset: 3px;
+}
+
+.trainer-global-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  height: 80px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--trainer-border);
+  background: var(--trainer-bg);
+  padding: 0 24px;
+}
+.trainer-header-brand { display: flex; min-width: 243px; align-items: center; }
+.trainer-header-account { display: flex; align-items: center; gap: 23px; }
+.trainer-notification-mark { display: inline-flex; align-items: center; justify-content: center; }
+.trainer-account-control { position: relative; display: flex; align-items: center; gap: 12px; }
+.trainer-account-trigger {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--trainer-cyan);
+  border-radius: 999px;
+  color: var(--trainer-cyan);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+}
+.trainer-account-trigger img { width: 100%; height: 100%; object-fit: cover; }
+.trainer-account-chevron { display: inline-flex; padding: 4px; }
+.trainer-account-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 60;
+  width: 240px;
+  border: 1px solid var(--trainer-border);
+  border-radius: 10px;
+  background: var(--trainer-panel);
+  padding: 8px;
+  box-shadow: 0 12px 32px #0008;
+}
+.trainer-account-menu-identity { display: grid; gap: 3px; border-bottom: 1px solid var(--trainer-border); padding: 9px 10px 12px; }
+.trainer-account-menu-identity strong { font-size: 13px; }
+.trainer-account-menu-identity span { overflow: hidden; color: var(--trainer-muted); font-size: 11px; text-overflow: ellipsis; }
+.trainer-account-menu button[role="menuitem"] { width: 100%; border-radius: 6px; padding: 10px; text-align: left; font-size: 12px; }
+.trainer-account-menu button[role="menuitem"]:hover { background: #ffffff0a; }
+.trainer-global-layout { display: grid; min-height: calc(100vh - 80px); grid-template-columns: 243px minmax(0, 1fr); }
+.trainer-global-sidebar {
+  position: sticky;
+  top: 80px;
+  display: flex;
+  height: calc(100vh - 80px);
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid var(--trainer-border);
+  background: var(--trainer-bg);
+  padding: 32px 12px 22px 23px;
+}
+.trainer-sidebar-label { margin: 0 0 15px 7px; color: var(--trainer-neutral); font-size: 13px; }
+.trainer-global-nav { display: grid; gap: 7px; }
+.trainer-global-nav button,
+.trainer-help-link {
+  position: relative;
+  display: flex;
+  min-height: 60px;
+  width: 100%;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 0 17px;
+  color: var(--trainer-text);
+  text-align: left;
+  font-size: 16px;
+}
+.trainer-global-nav button.active,
+.trainer-help-link.active {
+  border-color: #00627a;
+  background: #061922;
+  color: var(--trainer-cyan);
+}
+.trainer-global-nav button.active::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  border-radius: 6px 0 0 6px;
+  background: var(--trainer-cyan);
+  content: "";
+}
+.trainer-global-nav button.unavailable { cursor: not-allowed; opacity: .9; }
+.trainer-global-nav button.unavailable:hover { background: transparent; }
+.trainer-sidebar-bottom { border-top: 1px solid var(--trainer-border); padding-top: 17px; }
+.trainer-help-link { min-height: 62px; margin-bottom: 22px; }
+.trainer-sidebar-profile { display: flex; align-items: center; gap: 13px; border-top: 1px solid var(--trainer-border); padding: 17px 0 0; }
+.trainer-sidebar-profile img,
+.trainer-sidebar-initials { display: inline-flex; width: 54px; height: 54px; flex: 0 0 54px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--trainer-border); border-radius: 50%; object-fit: cover; color: var(--trainer-neutral); font-size: 14px; font-weight: 700; }
+.trainer-sidebar-profile-copy { display: grid; min-width: 0; gap: 2px; }
+.trainer-sidebar-profile-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.trainer-sidebar-profile-copy small { color: var(--trainer-muted); font-size: 11px; }
+.trainer-global-main { min-width: 0; min-height: calc(100vh - 80px); }
+.trainer-readonly-banner { border-bottom: 1px solid #235164; background: #0d1a21; padding: 7px 14px; text-align: center; color: var(--trainer-muted); font-size: 11px; }
+.trainer-route-empty { padding: 64px 32px; text-align: center; color: var(--trainer-muted); }
+
+.trainer-dashboard-grid {
+  display: grid;
+  min-height: calc(100vh - 80px);
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+.trainer-dashboard-main { min-width: 0; padding: 17px 21px 44px 40px; }
+.trainer-welcome { margin: 0 0 38px; color: var(--trainer-text); font-size: 38px; font-weight: 500; line-height: 1.2; letter-spacing: -.045em; font-optical-sizing: auto; }
+.trainer-client-area { border-bottom: 1px solid var(--trainer-border); padding-bottom: 24px; }
+.trainer-client-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 0 0 22px; }
+.trainer-client-heading h2,
+.trainer-section-heading h2 { margin: 0; color: var(--trainer-text); font-size: 35px; font-weight: 500; line-height: 1.2; letter-spacing: -.045em; font-optical-sizing: auto; }
+.trainer-client-heading p,
+.trainer-section-heading p { margin: 3px 0 0; color: var(--trainer-neutral); font-size: 22px; line-height: 1.3; }
+.trainer-client-actions { display: flex; align-items: center; gap: 12px; }
+.trainer-client-actions input { width: 180px; border: 1px solid var(--trainer-border); border-radius: 7px; background: var(--trainer-panel); padding: 11px 12px; font-size: 12px; }
+.trainer-button { display: inline-flex; min-height: 47px; align-items: center; justify-content: center; gap: 10px; border-radius: 8px; padding: 0 18px; font-size: 15px; font-weight: 600; transition: background .15s ease, border-color .15s ease; }
+.trainer-button-primary { border: 1px solid var(--trainer-cyan); background: var(--trainer-cyan); color: #05151b; }
+.trainer-button-primary:hover { background: #20c9ef; }
+.trainer-button-secondary { border: 1px solid var(--trainer-border); background: var(--trainer-panel); color: var(--trainer-text); }
+.trainer-invite-card { display: flex; min-height: 123px; align-items: center; gap: 26px; margin-left: 2px; border: 1px solid var(--trainer-border); border-radius: 10px; background: #0d171e; padding: 20px 18px 20px 22px; }
+.trainer-invite-copy { min-width: 0; flex: 1; }
+.trainer-invite-copy h3 { margin: 0; color: var(--trainer-text); font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
+.trainer-invite-copy p { margin: 3px 0 0; color: var(--trainer-neutral); font-size: 15px; line-height: 1.5; }
+.trainer-invite-action { min-width: 197px; }
+.trainer-client-tools { padding-top: 14px; }
+.trainer-section-heading { margin-bottom: 11px; }
+.trainer-section-heading h2 { font-size: 29px; }
+.trainer-section-heading p { font-size: 19px; }
+.trainer-tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-left: 2px; }
+.trainer-tool-card { display: flex; min-height: 116px; align-items: center; gap: 27px; border: 1px solid var(--trainer-border); border-radius: 10px; background: #0d171e; padding: 18px 22px; }
+.trainer-tool-card-wide { grid-column: 1 / -1; }
+.trainer-tool-card > span:last-child { display: grid; gap: 2px; }
+.trainer-tool-card strong { color: var(--trainer-text); font-size: 20px; font-weight: 500; letter-spacing: -.02em; }
+.trainer-tool-card small { color: var(--trainer-neutral); font-size: 15px; }
+.trainer-tools-rail { min-width: 0; border-left: 1px solid var(--trainer-border); padding: 94px 26px 40px; }
+.trainer-tools-rail > h2 { margin: 0 0 21px; color: var(--trainer-text); font-size: 22px; font-weight: 500; line-height: 1.2; white-space: nowrap; letter-spacing: -.025em; }
+.trainer-programs-card { border: 1px solid var(--trainer-border); border-radius: 10px; background: #0d171e; padding: 19px 20px 25px; }
+.trainer-programs-card-heading { display: flex; align-items: center; gap: 23px; }
+.trainer-programs-card-heading > span:last-child { display: grid; gap: 1px; }
+.trainer-programs-card-heading strong { color: var(--trainer-text); font-size: 20px; font-weight: 500; letter-spacing: -.02em; }
+.trainer-programs-card-heading small { color: var(--trainer-neutral); font-size: 15px; }
+.trainer-text-action { display: inline-flex; align-items: center; gap: 10px; margin-top: 33px; font-size: 15px; font-weight: 600; color: var(--trainer-text); }
+.trainer-programs-note { margin: 18px 0 0; color: var(--trainer-neutral); font-size: 15px; line-height: 1.65; }
+.trainer-state-panel { display: grid; min-height: 112px; align-content: center; gap: 12px; border: 1px solid var(--trainer-border); border-radius: 10px; background: #0d171e; padding: 20px; color: var(--trainer-muted); font-size: 14px; }
+.trainer-loading-line { display: block; width: 48%; height: 12px; border-radius: 99px; background: #26333c; animation: trainer-pulse 1.4s ease-in-out infinite; }
+.trainer-loading-line-short { width: 29%; }
+@keyframes trainer-pulse { 50% { opacity: .45; } }
+.trainer-error-panel { color: #ffb7ac; }
+.trainer-client-list { display: grid; gap: 8px; }
+.trainer-client-row { display: flex; align-items: center; gap: 13px; border: 1px solid var(--trainer-border); border-radius: 8px; background: #0d171e; padding: 12px; text-align: left; }
+.trainer-client-row:hover { border-color: #42606d; }
+.trainer-client-avatar { display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 50%; object-fit: cover; }
+.trainer-client-initials { border: 1px solid var(--trainer-border); color: var(--trainer-neutral); }
+.trainer-client-row-copy { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.trainer-client-row-copy strong { overflow: hidden; color: var(--trainer-text); text-overflow: ellipsis; white-space: nowrap; }
+.trainer-client-row-copy small { color: var(--trainer-muted); }
+.trainer-status { border: 1px solid var(--trainer-border); border-radius: 99px; padding: 4px 8px; color: var(--trainer-muted); font-size: 10px; }
+.trainer-status-active { border-color: #147550; color: #60d6a5; }
+
+@media (max-width: 1279px) {
+  .trainer-dashboard-grid { grid-template-columns: minmax(0, 1fr) 320px; }
+  .trainer-dashboard-main { padding-left: 28px; }
+  .trainer-tools-rail { padding: 42px 20px; }
+}
+@media (max-width: 950px) {
+  .trainer-global-layout { grid-template-columns: 200px minmax(0, 1fr); }
+  .trainer-global-sidebar { padding-left: 12px; }
+  .trainer-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .trainer-tools-rail { border-top: 1px solid var(--trainer-border); border-left: 0; padding: 28px; }
+}
+@media (max-width: 640px) {
+  .trainer-global-header { height: 68px; padding: 0 14px; }
+  .trainer-header-brand { min-width: auto; }
+  .trainer-header-brand img { width: 142px; height: 40px; }
+  .trainer-header-account { gap: 12px; }
+  .trainer-notification-mark img { width: 28px; height: 28px; }
+  .trainer-account-trigger { width: 40px; height: 40px; }
+  .trainer-global-layout { min-height: calc(100vh - 68px); grid-template-columns: minmax(0, 1fr); }
+  .trainer-global-sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--trainer-border); padding: 8px 10px; }
+  .trainer-sidebar-top { display: block; }
+  .trainer-sidebar-label { display: none; }
+  .trainer-global-nav { display: flex; gap: 2px; overflow-x: auto; }
+  .trainer-global-nav button { min-width: max-content; min-height: 42px; gap: 7px; padding: 0 9px; font-size: 12px; }
+  .trainer-global-nav button img { width: 24px; height: 24px; }
+  .trainer-global-nav button.active::before { width: 3px; }
+  .trainer-sidebar-bottom { display: flex; align-items: center; justify-content: space-between; border: 0; padding: 0; }
+  .trainer-help-link { width: auto; min-height: 44px; margin: 0; padding: 0 10px; font-size: 13px; }
+  .trainer-help-link img { width: 26px; height: 26px; }
+  .trainer-sidebar-profile { border: 0; padding: 0; }
+  .trainer-sidebar-profile img,
+  .trainer-sidebar-initials { width: 38px; height: 38px; flex-basis: 38px; }
+  .trainer-dashboard-main { padding: 20px 16px 30px; }
+  .trainer-welcome { margin-bottom: 25px; font-size: 29px; }
+  .trainer-client-heading { align-items: start; flex-direction: column; }
+  .trainer-client-heading h2 { font-size: 28px; }
+  .trainer-client-heading p { font-size: 18px; }
+  .trainer-client-actions { width: 100%; }
+  .trainer-client-actions input { min-width: 0; flex: 1; }
+  .trainer-invite-card { align-items: flex-start; flex-wrap: wrap; gap: 15px; padding: 16px; }
+  .trainer-invite-card [aria-hidden="true"] { width: 58px !important; height: 58px !important; }
+  .trainer-invite-copy { min-width: calc(100% - 78px); }
+  .trainer-invite-copy h3 { font-size: 18px; }
+  .trainer-invite-copy p { font-size: 13px; }
+  .trainer-invite-action { width: 100%; }
+  .trainer-tool-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .trainer-tool-card,
+  .trainer-tool-card-wide { min-height: 90px; grid-column: auto; gap: 16px; padding: 12px; }
+  .trainer-tool-card > [aria-hidden="true"] { width: 58px !important; height: 58px !important; }
+  .trainer-tool-card strong { font-size: 17px; }
+  .trainer-tool-card small { font-size: 13px; }
+  .trainer-tools-rail { padding: 24px 16px; }
+}
+
 .font-display {
   font-family: 'Bricolage Grotesque', sans-serif;
+  font-optical-sizing: auto;
 }
 
 .font-body {

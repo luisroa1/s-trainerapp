@@ -8,6 +8,7 @@ const adapter = source('../src/lib/supabase.ts');
 const migration = source('../supabase/migrations/20261007200000_client_onboarding_1a_canonical_persistence.sql');
 const panel = source('../src/components/trainer/TrainerClientProfilePanel.tsx');
 const detail = source('../src/components/trainer/TrainerClientDetail.tsx');
+const trainerApp = source('../src/components/trainer/TrainerApp.tsx');
 const legacyHealth = source('../src/components/trainer/ClientPathologiesSummary.tsx');
 
 test('age is derived from a valid date of birth and invalid or future dates stay unknown', () => {
@@ -54,7 +55,7 @@ test('Trainer adapter batches only existing Trainer-readable canonical profile t
   assert.match(method, /getCurrentHealthDeclaration/);
   assert.doesNotMatch(panel, /\.insert\(|\.upsert\(|\.update\(|\.delete\(/);
   assert.match(detail, /<TrainerClientProfilePanel client=\{client\} variant="rail" \/>/);
-  assert.match(detail, /<TrainerClientProfilePanel client=\{client\} variant="full" \/>/);
+  assert.match(detail, /<TrainerClientProfilePanel client=\{client\} variant="progress" \/>/);
 });
 
 test('Trainer detail uses canonical active nutrition and versioned training assignment reads', () => {
@@ -70,13 +71,31 @@ test('Trainer detail uses canonical active nutrition and versioned training assi
   assert.doesNotMatch(detail, /Datos históricos sincronizados/);
 });
 
-test('Trainer detail does not expose simulated messaging, note entry, or empty tabs', () => {
+test('Trainer detail uses the dedicated workstation shell and retains real section navigation', () => {
   assert.doesNotMatch(detail, /showMessageModal|chatHistory|handleSendMessage|NOTAS DEL ENTRENADOR|newNoteText/);
   assert.match(detail, /'Entrenamiento'.*'Nutrición'.*'Progreso'.*'Seguimiento'.*'Informes'/s);
   assert.doesNotMatch(detail, /'Peso', 'Medidas', 'Fuerza', 'Actividad', 'Fotos', 'Notas'/);
-  assert.match(detail, /xl:grid-cols-\[250px_minmax\(0,1fr\)_220px\]/);
+  assert.match(detail, /xl:grid-cols-\[25%_47\.7%_27\.3%\]/);
+  assert.match(detail, /<TrainerBrandMark[\s\S]*Volver a clientes[\s\S]*aria-label="Secciones de la ficha"[\s\S]*Cerrar sesión/);
+  assert.match(detail, /className="[^"]*border-r[^"]*"[\s\S]*Volver a clientes/);
+  assert.match(detail, /aria-label="Datos esenciales del cliente"[\s\S]*?variant="rail"/);
+  assert.match(detail, /aria-label=\{`Área de trabajo:/);
+  assert.match(detail, /aria-label="Herramientas contextuales"/);
+  assert.doesNotMatch(detail, /variant="full"/);
+  assert.doesNotMatch(detail, /lucide-react|Dumbbell|Apple|ChartNoAxesCombined/);
   assert.match(detail, /xl:sticky/);
-  assert.match(detail, /Herramientas/);
+  assert.match(trainerApp, /isClientWorkstation \? \(/);
+  assert.match(trainerApp, /className="trainer-global-header"/);
+  assert.match(trainerApp, /className="trainer-global-sidebar"/);
+  assert.match(trainerApp, /IS_READ_ONLY_PREVIEW/);
+  assert.match(trainerApp, /workstationTab/);
+  assert.match(detail, /role="alert"/);
+  assert.match(detail, /role="status"/);
+  assert.match(panel, /Resumen esencial del cliente/);
+  assert.match(panel, /Objetivo principal/);
+  assert.match(detail, /variant="health"/);
+  assert.match(panel, /Salud · declaración inicial/);
+  assert.doesNotMatch(panel.slice(panel.indexOf("if (variant === 'rail')"), panel.indexOf("if (variant === 'health')")), /Actividad diaria|Experiencia|Salud · declaración/);
   assert.match(panel, /sm:flex-row/);
 });
 
